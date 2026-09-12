@@ -14,7 +14,7 @@ main
 
 Runs on every pull request and push into `feature/v1-iteration-1` (and on `main` later).
 
-1. Frontend job: `npm ci`, `npm run build`
+1. Frontend job: `npm install`, `npm run build` (install, not `npm ci` — Windows lockfiles omit Linux-only optional native packages)
 2. Backend job: `dotnet restore`, `dotnet build`, `dotnet test` (unit tests, plus integration tests when present)
 3. A failing test or build fails the job. There is no `continue-on-error`.
 

@@ -14,9 +14,9 @@ public class CiWorkflowTests
     }
 
     [Fact]
-    public void Frontend_job_builds_the_react_app()
+    public void Frontend_job_installs_and_builds_the_react_app()
     {
-        Assert.Contains("npm ci", Workflow);
+        Assert.Contains("npm install --no-audit --fund=false", Workflow);
         Assert.Contains("npm run build", Workflow);
     }
 

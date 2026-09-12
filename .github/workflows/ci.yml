@@ -20,7 +20,11 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      # Lockfiles generated on Windows omit Linux-only optional native deps
+      # (e.g. @emnapi/*). `npm ci` then fails on ubuntu-latest. `npm install`
+      # still respects package-lock.json and fills those platform entries.
+      - name: frontend-install
+        run: npm install --no-audit --fund=false
       - name: frontend-build
         run: npm run build
 
