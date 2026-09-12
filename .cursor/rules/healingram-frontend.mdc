@@ -1,0 +1,15 @@
+---
+description: Healingram React UX conventions for V1
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend conventions
+
+- Spec and `docs/flows/` beat leftover prototype copy.
+- Public lists come from the catalog API, not a second hardcoded inventory, once Catalog is wired.
+- No unverified price, rating, review count, guest favourite, or out-of-geo destination.
+- URL holds non-personal filter state only.
+- Async CTAs disable duplicate submits and keep the button visible.
+- Sticky CTAs must not cover content or the keyboard.
+- Payment return pages may show Processing — they must never set paid.

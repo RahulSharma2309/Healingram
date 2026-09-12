@@ -256,7 +256,7 @@ export function getLocationOptionsWithCounts(
 
     // Any localities not in dest list
     for (const [locality, _] of localityCounts) {
-      if (destLocalities.includes(locality as (typeof destLocalities)[number])) continue;
+      if ((destLocalities as readonly string[]).includes(locality)) continue;
       if (options.some((o) => o.id === locality)) continue;
       const withLoc = filterBrowseRetreats({
         needs: state.needs,

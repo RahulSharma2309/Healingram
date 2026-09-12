@@ -1,42 +1,48 @@
-# SereniTrip — Wellness Retreat Booking (Proposal MVP)
+# SereniTrip / Healingram — V1 iteration
 
-Interactive UX prototype for a **MakeMyTrip-style wellness retreat marketplace** — built for client proposals and demos.
+Programme-led retreat marketplace. This iteration lives on **`feature/v1-iteration-1`**. Product, architecture, and story status: [`docs/README.md`](docs/README.md).
 
-## What's included
+The React app in `src/` is the UX shell. The .NET modular monolith and gateway live in `backend/`.
 
-### 1. Customer website (`/`)
-- Home with search, therapy categories, destinations
-- Retreat listing & search results with filters
-- Retreat detail + booking flow (checkout → payment → confirmation)
-- Wellness questionnaire (rule-based recommendations demo)
-- Login, signup, user dashboard
-- About, contact, FAQ, blog, therapies, destinations
+## Run with Docker (app + Postgres)
 
-### 2. Vendor panel (`/vendor`)
-- Dashboard, retreats, availability/calendar sync, bookings, earnings
+```powershell
+.\scripts\dev-up.ps1 -WithObservability
+```
 
-### 3. Admin panel (`/admin`)
-- Vendors, retreats, bookings, commission, CMS/SEO, reports, recommendation rules
+- Web: http://localhost:8080
+- Gateway: http://localhost:5000/api/health
+- API: http://localhost:5080/api/health
+- Seq logs: http://localhost:5341
+- Jaeger traces: http://localhost:16686
+- Mailpit: http://localhost:8025
+- Postgres: `localhost:5432` / user `healingram` / db `healingram`
 
-> **Note:** This is a **front-end prototype only**. No real API, payments, or database.
+## Run on localhost (deps in Docker)
 
-## Run locally
-
-```bash
+```powershell
+.\scripts\dev-deps.ps1
+dotnet run --project backend/src/Healingram.Api
+dotnet run --project backend/src/Healingram.Gateway
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Frontend: http://localhost:5173 (or the next free port). Point it at the gateway with `VITE_API_BASE_URL=http://localhost:5000`.
 
-## Tech stack
+## Tests
 
-- React 19 + TypeScript
-- Vite
-- React Router
-- Tailwind CSS v4
-- Lucide icons
+```powershell
+dotnet test backend/Healingram.slnx
+```
 
-## Proposal use
+## Branching
 
-Use this demo to walk through user flows during sales calls. Link from the top banner to switch between **Vendor** and **Admin** panels.
+- Iteration: `feature/v1-iteration-1`
+- Story: `story/STORY-XX-YY-ZZ-slug`
+- PR target: the iteration branch. CI must be green. QA + PO UAT before merge.
+- `main` receives the finished iteration later.
+
+## Spec
+
+`Healingram_Developer_Functional_Specification_V1.docx` is authoritative for V1 behaviour.
