@@ -10,14 +10,15 @@
 
 ## Cadence for every story
 
-1. PO confirms the story is ready (prerequisites for its epic are listed).
-2. Developer branches from `feature/v1-iteration-1`.
-3. Developer implements and adds unit tests.
-4. Developer opens a PR into `feature/v1-iteration-1`.
-5. CI builds and runs tests. Red CI is not reviewable as done.
-6. QA tests the story.
-7. PO performs UAT.
-8. Only then merge.
+1. You read the story file in `docs/engineer/epics/` (see `docs/engineer/CURRENT.md`).
+2. You say **go**. Prefer a **new Cursor chat** for that story (`docs/engineer/HOW-TO-RUN-A-STORY.md`).
+3. Developer branches from `feature/v1-iteration-1`.
+4. Developer implements and adds unit tests.
+5. Developer opens a PR into `feature/v1-iteration-1`.
+6. CI builds and runs tests. Red CI is not reviewable as done.
+7. QA tests the story on **local**.
+8. PO performs UAT on **local** (no deploy required).
+9. Done notes go in the same story file. The next story file is written. Only then merge.
 
 ## Language
 

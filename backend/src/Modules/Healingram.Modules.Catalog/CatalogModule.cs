@@ -21,6 +21,7 @@ public sealed class CatalogModule : IAppModule
     public void MapEndpoints(IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/catalog").WithTags("Catalog");
+        group.MapGet("/ready", () => Results.Ok(new { module = Name }));
         group.MapGet("/needs", () => Results.Ok(new
         {
             items = new[]

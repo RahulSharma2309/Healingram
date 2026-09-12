@@ -62,7 +62,9 @@ Gateway does **not** write availability, prices, or payments.
 
 ## Frontend
 
-Existing React 19 + Vite + React Router + Tailwind app stays the customer/partner/admin shell. It talks only to the gateway base URL (`VITE_API_BASE_URL`).
+Existing React 19 + Vite + React Router + Tailwind app stays the customer/partner/admin shell. It talks only to the gateway base URL (`VITE_API_BASE_URL`, local `http://localhost:5000`). It never talks to Postgres and never marks a payment paid.
+
+`ui-reference/` (after STORY-00-06-01) is the frozen demo look. Stories lift UI from it. The website must not invent catalog facts once Catalog is wired. Places are inventory-driven (any published Indian state/city).
 
 ## Data
 

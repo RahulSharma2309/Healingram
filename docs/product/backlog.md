@@ -2,7 +2,9 @@
 
 Status: `todo` | `in_progress` | `dev_done` | `qa_passed` | `uat_passed` | `done`
 
-Work top to bottom. Current story: **STORY-00-01-02**.
+This table is the **ID index**. Story truth (acceptance, Done notes, next file) lives in `docs/engineer/epics/`. Current pointer: [docs/engineer/CURRENT.md](../engineer/CURRENT.md).
+
+Work one story at a time. Current story to **read**: **STORY-00-02-02** (do not implement until you say go). **STORY-00-02-01** is `dev_done` — UAT locally.
 
 Branch for a story: `story/STORY-XX-YY-ZZ-short-slug` from `feature/v1-iteration-1`.
 
@@ -19,27 +21,27 @@ Prerequisites: [epic-00-platform.md](../prerequisites/epic-00-platform.md)
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
 | STORY-00-01-01 | Iteration branch, agents, docs, architecture | `in_progress` | `docs/` exists; PO/Dev/QA skills exist; feature branch is `feature/v1-iteration-1`; spec is the authority. |
-| STORY-00-01-02 | GitHub Actions CI | `qa_passed` | PRs into `feature/v1-iteration-1` build frontend and backend and run unit tests. Red tests fail the workflow. |
+| STORY-00-01-02 | GitHub Actions CI | `done` | PRs into `feature/v1-iteration-1` build frontend and backend and run unit tests. Red tests fail the workflow. PR #1 merged. |
 
 ### FEAT-00-02 Modular monolith host and gateway
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
-| STORY-00-02-01 | API host + module interface | `todo` | `Healingram.Api` boots, registers modules, `GET /health` and `GET /meta` return JSON. Unit tests cover health payload shape. |
+| STORY-00-02-01 | API host + module interface | `dev_done` | `Healingram.Api` boots, registers modules, `GET /api/health` and `GET /api/meta` return JSON. Unit tests cover health payload shape. |
 | STORY-00-02-02 | Gateway forwards to API | `todo` | Gateway exposes `/api/health`, `/api/meta`, `/api/docs`. Correlation ID is created and forwarded. |
 
 ### FEAT-00-03 Postgres (Docker and localhost)
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
-| STORY-00-03-01 | Compose Postgres + local connection | `todo` | `docker compose` starts Postgres. README documents a localhost install path. API can connect both ways. |
-| STORY-00-03-02 | Per-module schemas and migrate-on-boot | `todo` | Schemas `identity`, `catalog`, `matching`, `availability`, `booking`, `payment`, `leads`, `partners` exist after boot. |
+| STORY-00-03-01 | Compose Postgres + local connection | `in_progress` | `docker compose` starts Postgres. README documents a localhost install path. API can connect both ways. |
+| STORY-00-03-02 | Per-module schemas and migrate-on-boot | `in_progress` | Schemas `identity`, `catalog`, `matching`, `availability`, `booking`, `payment`, `leads`, `partners` exist after boot. |
 
 ### FEAT-00-04 Observability stand-ins
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
-| STORY-00-04-01 | Serilog → Seq, OTLP → Jaeger, Mailpit | `todo` | One request to `/api/health` appears in Seq and Jaeger. Mailpit UI is up. No PII fields in the log template. |
+| STORY-00-04-01 | Serilog → Seq, OTLP → Jaeger, Mailpit | `in_progress` | One request to `/api/health` appears in Seq and Jaeger. Mailpit UI is up. No PII fields in the log template. |
 
 ### FEAT-00-05 Runnable packaging
 
@@ -47,11 +49,17 @@ Prerequisites: [epic-00-platform.md](../prerequisites/epic-00-platform.md)
 | --- | --- | --- | --- |
 | STORY-00-05-01 | Optimized Docker images + one-command up | `todo` | `infra/docker-compose.yml` runs web, gateway, api, postgres. Images are multi-stage. `scripts/dev-up.ps1` starts the stack. |
 
+### FEAT-00-06 UI reference split
+
+| ID | Story | Status | Acceptance |
+| --- | --- | --- | --- |
+| STORY-00-06-01 | Snapshot the demo into `ui-reference/` | `todo` | Demo pages copied to `ui-reference/`. Live `npm run dev` still works. No new product behaviour in the snapshot. |
+
 ---
 
 ## EPIC-01 — Central inventory and publication
 
-One catalog dataset feeds header, homepage, results, match, and listing. Unpublished or out-of-geo retreats never appear publicly.
+One catalog dataset feeds header, homepage, results, match, and listing. Unpublished or incomplete retreats never appear publicly. **States and cities are derived from published inventory** (any Indian state), not a Karnataka/Kerala allow-list.
 
 Flow: [inventory.md](../flows/inventory.md) · Prerequisites: [epic-01-inventory.md](../prerequisites/epic-01-inventory.md)
 
@@ -59,16 +67,16 @@ Flow: [inventory.md](../flows/inventory.md) · Prerequisites: [epic-01-inventory
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
-| STORY-01-01-01 | Need / programme taxonomy API | `todo` | Needs and programme themes are served from Catalog. V1 need slugs match the spec. Unit tests reject unknown slugs. |
-| STORY-01-01-02 | Destination tree API | `todo` | Only Karnataka, Bengaluru-nearby, Kerala. Unit tests reject Goa/Rishikesh/etc. |
+| STORY-01-01-01 | Needs and places from inventory | `todo` | Needs and `GET /api/catalog/places` (state → cities + counts) from **published** catalog rows. A published retreat in any Indian state makes that state appear. Unpublished rows do not. No Karnataka/Kerala special case. Full file: `docs/engineer/epics/EPIC-01-inventory/FEAT-01-01-taxonomy-and-places/STORY-01-01-01.md`. |
+| STORY-01-01-02 | Destination tree persistence (written after 01-01-01) | `todo` | Place rows persisted; still inventory-driven. Story file created only after 01-01-01 Done. |
 
 ### FEAT-01-02 Retreat records and publication
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
 | STORY-01-02-01 | Retreat + programme + room + price model | `todo` | A programme cannot belong to another retreat. Price has `VERIFIED` / `ESTIMATED` / `ON_REQUEST` and validity window. Unit tests for those rules. |
-| STORY-01-02-02 | Publication gate | `todo` | Public list = `ACTIVE` + V1 geo + required identity + ≥1 valid programme. Unit tests cover each failing reason. |
-| STORY-01-02-03 | Seed the 14 launch retreats | `todo` | Seed is idempotent. Only those 14 names can be public. Unverified prices stay `ON_REQUEST`. |
+| STORY-01-02-02 | Publication gate | `todo` | Public list = `ACTIVE` + required identity + ≥1 valid programme. **Not** geo-locked. Unit tests cover each failing reason. |
+| STORY-01-02-03 | Seed launch retreats | `todo` | Seed is idempotent. Today’s agreed names are data, not a permanent ceiling. Unverified prices stay `ON_REQUEST`. Unpublished stay hidden. |
 
 ### FEAT-01-03 Supporting listing records
 
@@ -131,7 +139,7 @@ Flow: [results.md](../flows/results.md) · Prerequisites: [epic-04-results.md](.
 
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
-| STORY-04-01-01 | Public retreat search | `todo` | Filters: need, location, duration, verified price band, programme style, verified flags. OR within group, AND across groups. Unit tests for combination and geo fence. |
+| STORY-04-01-01 | Public retreat search | `todo` | Filters: need, location, duration, verified price band, programme style, verified flags. OR within group, AND across groups. Location = published inventory places. Unit tests for combination; no hard-coded state fence. |
 | STORY-04-01-02 | Contextual location facets | `todo` | A location is listed only if ≥1 retreat matches the non-location filters. Changing need clears an invalid location with the spec message. |
 
 ### FEAT-04-02 Results UI
@@ -153,7 +161,7 @@ Flow: [find-my-match.md](../flows/find-my-match.md) · Prerequisites: [epic-05-m
 | ID | Story | Status | Acceptance |
 | --- | --- | --- | --- |
 | STORY-05-01-01 | Four-step API | `todo` | Q1/Q2/Q4 multi, Q3 single. Continue disabled until answered. Unit tests for selection rules. Persist non-sensitive slugs only. |
-| STORY-05-01-02 | Match engine | `todo` | Matches only public launch records. Explains Why it matches you. Closest matches may relax optional prefs; never invent supply or leave V1 geo. |
+| STORY-05-01-02 | Match engine | `todo` | Matches only published catalog records. Explains Why it matches you. Closest matches may relax optional prefs; never invent supply. Geography = published inventory. |
 | STORY-05-01-03 | Match UI | `todo` | `/find-my-match`, 1 of 4, Back keeps answers, See My Matches, Talk to an Expert on empty. |
 
 ---
@@ -294,10 +302,10 @@ Flow: [hardening.md](../flows/hardening.md) · Prerequisites: [epic-12-hardening
 
 ## Later (not this iteration)
 
-Why Healingram section, featured/rankings, listing components 9–13 as long pages, instant inventory, live gateway charging in production, WhatsApp Business API, new destinations.
+Why Healingram section, featured/rankings, listing components 9–13 as long pages, instant inventory, live gateway charging in production, WhatsApp Business API. Extra states/cities are data (published inventory), not a later epic.
 
 ---
 
-## Suggested first implementation slice after this planning story
+## Suggested next implementation
 
-`STORY-00-01-02` (CI) then `STORY-00-02-01` (API host) — do not start Catalog UI until EPIC-00 health, Postgres, and observability are `done`.
+UAT [STORY-00-02-01](../engineer/epics/EPIC-00-platform/FEAT-00-02-host-and-gateway/STORY-00-02-01.md) locally, then read [STORY-00-02-02](../engineer/epics/EPIC-00-platform/FEAT-00-02-host-and-gateway/STORY-00-02-02.md) and say **go**.

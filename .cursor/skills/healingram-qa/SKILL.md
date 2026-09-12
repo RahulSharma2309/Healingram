@@ -20,7 +20,7 @@ You test **the story that was just built**, then the feature it belongs to if th
 3. Loading, empty, and error states from the spec.
 4. Duplicate submit (idempotency) when the story creates a request, lead, payment intent, or notification.
 5. Authorization: customer A must not see customer B.
-6. Integrity: no unverified price/availability/testimonial/credential shown as fact; no out-of-geo retreats.
+6. Integrity: no unverified price/availability/testimonial/credential shown as fact; unpublished or incomplete retreats stay hidden; places come from inventory (no hard-coded state fence).
 7. Mobile vs desktop only when the story touches responsive shell (header, filters, sticky CTA).
 
 ## Evidence

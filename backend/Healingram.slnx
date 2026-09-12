@@ -16,6 +16,7 @@
     <Project Path="src/Modules/Healingram.Modules.Payment/Healingram.Modules.Payment.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Healingram.Api.Tests/Healingram.Api.Tests.csproj" />
     <Project Path="tests/Healingram.BuildingBlocks.Tests/Healingram.BuildingBlocks.Tests.csproj" />
     <Project Path="tests/Healingram.Modules.Catalog.Tests/Healingram.Modules.Catalog.Tests.csproj" />
   </Folder>

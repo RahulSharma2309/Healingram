@@ -29,3 +29,5 @@ Developer (code + unit tests) → CI green → QA passed → PO UAT passed.
 ## Spec wins
 
 `Healingram_Developer_Functional_Specification_V1.docx` and `docs/` beat the old prototype and `BACKEND_SPRINT_PLAYBOOK.md` where they conflict. Modular monolith, not microservices, for this iteration.
+
+Human PO overrides in `docs/engineer/THE-PLAN.md` beat the written spec (inventory-driven geography, published inventory as the ceiling, local UAT). Story truth is the file under `docs/engineer/epics/`. New chat per story — do not rely on old conversation history.

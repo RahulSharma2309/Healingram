@@ -12,7 +12,7 @@
 
 ## If we cannot match exactly
 
-Show closest matches by relaxing optional preferences only. Never invent a retreat or leave Karnataka/Kerala. Always offer Talk to an Expert.
+Show closest matches by relaxing optional preferences only. Never invent a retreat. Matches stay inside **published** inventory (any state that has it). Always offer Talk to an Expert.
 
 ## What we store
 

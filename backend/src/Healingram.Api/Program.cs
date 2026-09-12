@@ -49,7 +49,7 @@ IAppModule[] modules =
 foreach (var module in modules)
 {
     module.Register(builder.Services, builder.Configuration);
-    builder.Services.AddSingleton(module);
+    builder.Services.AddSingleton<IAppModule>(module);
 }
 
 var otlp = builder.Configuration["OpenTelemetry:OtlpEndpoint"];

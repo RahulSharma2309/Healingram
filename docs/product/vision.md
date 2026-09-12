@@ -11,11 +11,11 @@ Healingram is a **programme-led retreat marketplace**. A guest does not shop roo
 
 ## V1 geography and supply
 
-Only Karnataka (including Bengaluru area) and Kerala. Only these 14 retreats may be public, and only when published with at least one valid programme:
+**Inventory-driven (PO override of the written spec).** The site shows whatever is **published** in the catalog, in any Indian state or city. Filters group by state; selecting a state expands the cities that actually have published retreats (with counts). A state or city with zero published inventory does not appear.
 
-**Karnataka / Bengaluru area:** Shathayu Ayurveda Yoga Retreat; Tattvam in the Hills; Ayurvedagram Heritage Wellness Centre; Shreyas Retreat; Soukya.
+The original 14 names (Karnataka / Bengaluru area and Kerala) are **seed data**, not a permanent ceiling. Unpublished or incomplete rows stay hidden.
 
-**Kerala:** Mekosha Ayurveda Spasuites; Amal Tamara; Kalari Rasayana; Prakriti Shakti; Somatheeram Ayurveda Village; Nattika Beach Ayurveda Retreat; Carnoustie Ayurveda and Wellness Resort; Kairali Ayurvedic Healing Village; Niraamaya Retreats Surya Samudra.
+Authority: `docs/engineer/THE-PLAN.md`.
 
 ## Commerce rule
 
@@ -25,6 +25,6 @@ The browser return URL must never mark a booking paid.
 
 ## What V1 will not do
 
-Why Healingram homepage section, featured/ranked lists, listing components 9–13 as long pages, live instant inventory, automated marketplace settlement, WhatsApp Business API automation, new destinations, public medical recommendations.
+Why Healingram homepage section, featured/ranked lists, listing components 9–13 as long pages, live instant inventory, automated marketplace settlement, WhatsApp Business API automation, public medical recommendations. New states/cities appear when published inventory exists — that is not a later rewrite.
 
 Those are reserved so the next iteration can add them without rewriting the core.
