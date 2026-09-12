@@ -92,7 +92,6 @@ export function RetreatListingComponent1({ listing }: Props) {
   }, [retreat.id, programmeId]);
 
   const isFlexible = pricingRow?.durationMode === "flexible";
-  const durationUnit = pricingRow?.durationUnit ?? selectedProgramme?.durationUnit ?? "nights";
   const guestCount =
     guestMode === "group"
       ? Math.floor(Number(groupSeats))
@@ -441,7 +440,7 @@ export function RetreatListingComponent1({ listing }: Props) {
           <div className="hidden lg:flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={openAvailability}
+              onClick={() => openAvailability()}
               disabled={!canSubmit}
               className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-6 py-3 text-sm font-semibold text-white hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -538,7 +537,7 @@ export function RetreatListingComponent1({ listing }: Props) {
 
             <button
               type="button"
-              onClick={openAvailability}
+              onClick={() => openAvailability()}
               disabled={!canSubmit}
               className="mt-5 w-full rounded-xl bg-teal-600 py-3.5 text-sm font-semibold text-white hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -640,7 +639,7 @@ export function RetreatListingComponent1({ listing }: Props) {
           </div>
           <button
             type="button"
-            onClick={openAvailability}
+            onClick={() => openAvailability()}
             disabled={!canSubmit}
             className="shrink-0 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
           >

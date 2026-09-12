@@ -20,5 +20,15 @@ dist-ssr
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
+
+# .NET
+backend/**/bin/
+backend/**/obj/
+*.user
+*.userosscache
+
+# Secrets
+.env
+appsettings.Development.json
+*.pem

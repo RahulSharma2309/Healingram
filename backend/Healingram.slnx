@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Healingram.Api/Healingram.Api.csproj" />
+    <Project Path="src/Healingram.BuildingBlocks/Healingram.BuildingBlocks.csproj" />
+    <Project Path="src/Healingram.Contracts/Healingram.Contracts.csproj" />
+    <Project Path="src/Healingram.Gateway/Healingram.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/Healingram.Modules.Availability/Healingram.Modules.Availability.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Booking/Healingram.Modules.Booking.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Catalog/Healingram.Modules.Catalog.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Identity/Healingram.Modules.Identity.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Leads/Healingram.Modules.Leads.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Matching/Healingram.Modules.Matching.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Partners/Healingram.Modules.Partners.csproj" />
+    <Project Path="src/Modules/Healingram.Modules.Payment/Healingram.Modules.Payment.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Healingram.BuildingBlocks.Tests/Healingram.BuildingBlocks.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Catalog.Tests/Healingram.Modules.Catalog.Tests.csproj" />
+  </Folder>
+</Solution>

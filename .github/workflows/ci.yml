@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [feature/v1-iteration-1, main]
+  push:
+    branches: [feature/v1-iteration-1, main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: frontend-build
+        run: npm run build
+
+  backend:
+    name: backend-build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: dotnet restore backend/Healingram.slnx
+      - run: dotnet build backend/Healingram.slnx --no-restore -c Release
+      - name: unit-and-integration-tests
+        run: dotnet test backend/Healingram.slnx --no-build --no-restore -c Release --verbosity normal

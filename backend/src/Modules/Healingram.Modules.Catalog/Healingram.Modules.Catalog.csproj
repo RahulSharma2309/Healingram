@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\Healingram.BuildingBlocks\Healingram.BuildingBlocks.csproj" />
+    <ProjectReference Include="..\..\Healingram.Contracts\Healingram.Contracts.csproj" />
+  </ItemGroup>
+</Project>

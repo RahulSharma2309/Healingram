@@ -1,0 +1,15 @@
+---
+description: Healingram .NET modular monolith and gateway conventions
+globs: backend/**/*.cs
+alwaysApply: false
+---
+
+# Backend conventions
+
+- One module = one schema + one DbContext. Never query another module’s tables.
+- Cross-module calls go through `Healingram.Contracts` interfaces.
+- Business rules live in the module, not in the gateway.
+- Unit-test domain/status/price/publication rules before completing a story.
+- Log structured events with `CorrelationId`. Never log phone, email, notes, or wellness free text.
+- Idempotency keys on request create, alternative accept, payment intent, webhook, notification.
+- `PAID` only from a verified webhook handler.
