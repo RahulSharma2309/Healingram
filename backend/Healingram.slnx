@@ -18,6 +18,13 @@
   <Folder Name="/tests/">
     <Project Path="tests/Healingram.Api.Tests/Healingram.Api.Tests.csproj" />
     <Project Path="tests/Healingram.BuildingBlocks.Tests/Healingram.BuildingBlocks.Tests.csproj" />
+    <Project Path="tests/Healingram.Gateway.Tests/Healingram.Gateway.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Availability.Tests/Healingram.Modules.Availability.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Booking.Tests/Healingram.Modules.Booking.Tests.csproj" />
     <Project Path="tests/Healingram.Modules.Catalog.Tests/Healingram.Modules.Catalog.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Identity.Tests/Healingram.Modules.Identity.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Leads.Tests/Healingram.Modules.Leads.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Matching.Tests/Healingram.Modules.Matching.Tests.csproj" />
+    <Project Path="tests/Healingram.Modules.Payment.Tests/Healingram.Modules.Payment.Tests.csproj" />
   </Folder>
 </Solution>

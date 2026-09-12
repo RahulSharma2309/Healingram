@@ -1,66 +1,62 @@
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { retreats, formatPrice } from "../../data/mockData";
-import { CreditCard, Shield } from "lucide-react";
+import { Shield } from "lucide-react";
+import { fetchRetreatListing } from "../../lib/api/catalog";
 
 export function Checkout() {
   const { id } = useParams();
-  const retreat = retreats.find((r) => r.id === id) ?? retreats[0];
-  const total = retreat.price + 500;
+  const [name, setName] = useState<string | null>(null);
+  const [place, setPlace] = useState<string | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+
+  useEffect(() => {
+    if (!id) {
+      setStatus("missing");
+      return;
+    }
+    let cancelled = false;
+    fetchRetreatListing(id)
+      .then((listing) => {
+        if (cancelled) return;
+        setName(listing.name);
+        setPlace(`${listing.locality}, ${listing.stateLabel}`);
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("missing");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
       <h1 className="font-display text-2xl font-bold text-sage-800 mb-8">Checkout</h1>
-      <div className="grid md:grid-cols-2 gap-8">
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            window.location.href = "/payment-success";
-          }}
+      <div className="bg-white rounded-xl border border-sand-200 p-6 max-w-xl">
+        <p className="text-sm text-sage-600 mb-4">
+          This page does not take payment and does not show dummy retreat prices. Request
+          availability on a listing first. Only a verified webhook can mark a booking paid.
+        </p>
+        {status === "loading" && <p className="text-sm text-sage-500">Loading retreat…</p>}
+        {status === "ready" && (
+          <p className="font-medium text-sage-800">
+            {name}
+            {place ? <span className="block text-sm font-normal text-sage-600">{place}</span> : null}
+          </p>
+        )}
+        {status === "missing" && (
+          <p className="text-sm text-sage-600">That retreat is not in the published catalog.</p>
+        )}
+        <p className="flex items-center gap-1 text-xs text-gray-400 mt-4">
+          <Shield className="w-3 h-3" /> Secure payment is on the request payment page, not here.
+        </p>
+        <Link
+          to={id ? `/retreats/${id}` : "/retreats"}
+          className="mt-6 inline-flex justify-center py-3 px-5 bg-teal-600 text-white font-medium rounded-xl hover:bg-teal-500"
         >
-          <div className="bg-white rounded-xl border border-sand-200 p-6">
-            <h2 className="font-semibold mb-4">Guest details</h2>
-            {["Full name", "Email", "Phone"].map((label) => (
-              <label key={label} className="block mb-3">
-                <span className="text-xs text-gray-500">{label}</span>
-                <input className="w-full mt-1 border border-sand-200 rounded-lg px-3 py-2" required />
-              </label>
-            ))}
-          </div>
-          <div className="bg-white rounded-xl border border-sand-200 p-6">
-            <h2 className="font-semibold mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5" /> Payment (Razorpay demo)
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">UPI, cards, net banking — integration in Phase 2</p>
-            <button type="submit" className="w-full py-3 bg-teal-600 text-white font-medium rounded-xl hover:bg-teal-500">
-              Pay {formatPrice(total)}
-            </button>
-            <p className="flex items-center justify-center gap-1 text-xs text-gray-400 mt-3">
-              <Shield className="w-3 h-3" /> Secure payment
-            </p>
-          </div>
-        </form>
-        <div className="bg-sage-50 rounded-xl p-6 h-fit">
-          <h2 className="font-semibold mb-4">Booking summary</h2>
-          <p className="font-medium">{retreat.name}</p>
-          <p className="text-sm text-gray-600">{retreat.location} · {retreat.duration}</p>
-          <hr className="my-4 border-sand-200" />
-          <div className="flex justify-between text-sm">
-            <span>Retreat fee</span>
-            <span>{formatPrice(retreat.price)}</span>
-          </div>
-          <div className="flex justify-between text-sm mt-2">
-            <span>Platform fee</span>
-            <span>{formatPrice(500)}</span>
-          </div>
-          <div className="flex justify-between font-bold mt-4">
-            <span>Total</span>
-            <span>{formatPrice(total)}</span>
-          </div>
-          <Link to={`/retreats/${retreat.id}`} className="text-sm text-teal-600 mt-4 inline-block">
-            Change retreat
-          </Link>
-        </div>
+          Back to retreat
+        </Link>
       </div>
     </div>
   );

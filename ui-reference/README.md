@@ -1,9 +1,9 @@
-# UI reference (the demo)
+# UI reference
 
-This folder is the **frozen look** of the clickable demo: homepage, retreats, listing, login, partner, admin.
+This folder is a **frozen snapshot** of the demo look-and-feel (pages, components, data, lib, layouts, navigation, and `App.tsx`).
 
-**Rule:** do not add new product behaviour here. Each story **copies** a screen (or a piece) into the live app and puts a real API behind that piece. You can still click the demo locally via `npm run dev` on the live app until screens are rewired.
+**Reference only.** Do not add features here. Do not treat this folder as the product.
 
-When the live app matches this reference and is end to end, **delete this folder**.
+The live app remains `src/`. Later stories copy a screen (or a piece) from here into `src/` and put a real API behind that piece.
 
-Until [STORY-00-06-01](../docs/engineer/epics/EPIC-00-platform/FEAT-00-06-ui-reference/STORY-00-06-01.md) copies files here, the demo still lives in repo `src/` so `npm run dev` keeps working. Say **go** on that story if you want the snapshot filled first.
+When the live app matches this reference end to end, **delete this folder**.

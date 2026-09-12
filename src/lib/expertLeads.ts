@@ -3,6 +3,8 @@
  * Captures Talk to an Expert requests for WhatsApp / phone follow-up.
  */
 
+import { postExpertLead } from "./api/leads";
+
 export type ExpertLeadStatus =
   | "NEW"
   | "CONTACTED"
@@ -237,7 +239,7 @@ export function travelWindowLabel(id: ExpertTravelWindow | ""): string {
   return TRAVEL_WINDOW_OPTIONS.find((o) => o.id === id)?.label ?? id;
 }
 
-export function createExpertLead(input: ExpertLeadInput): ExpertLead {
+export async function createExpertLead(input: ExpertLeadInput): Promise<ExpertLead> {
   const now = new Date().toISOString();
   const phoneNumber = digitsOnly(input.phoneNumber);
   const lead: ExpertLead = {
@@ -264,6 +266,22 @@ export function createExpertLead(input: ExpertLeadInput): ExpertLead {
     status: "NEW",
     notes: [],
   };
+
+  try {
+    const server = await postExpertLead({
+      fullName: lead.fullName,
+      phone: lead.normalizedPhone,
+      email: lead.email,
+      helpType: lead.helpTypes[0] ?? "something_else",
+      need: lead.wellnessNeeds[0] ?? "not_sure",
+      travelWindow: lead.travelWindow || "not_sure",
+      whatsappConsent: lead.whatsappConsent,
+      source: lead.source,
+    });
+    if (server.id) lead.leadId = server.id;
+  } catch {
+    /* keep the local lead if the API is down */
+  }
 
   const leads = readLeads();
   leads.unshift(lead);

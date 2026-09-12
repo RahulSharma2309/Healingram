@@ -113,7 +113,7 @@ export function TalkToExpert() {
     return null;
   };
 
-  const onRequestCall = (e: FormEvent) => {
+  const onRequestCall = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const err = validateForm(false);
@@ -123,14 +123,14 @@ export function TalkToExpert() {
     }
     setSubmitting(true);
     try {
-      const lead = createExpertLead(buildLeadPayload());
+      const lead = await createExpertLead(buildLeadPayload());
       setSubmittedLead(lead);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const onChatWhatsApp = () => {
+  const onChatWhatsApp = async () => {
     setError(null);
     const err = validateForm(true);
     if (err) {
@@ -139,7 +139,7 @@ export function TalkToExpert() {
     }
     setSubmitting(true);
     try {
-      const lead = createExpertLead({ ...buildLeadPayload(), whatsappConsent: true });
+      const lead = await createExpertLead({ ...buildLeadPayload(), whatsappConsent: true });
       setSubmittedLead(lead);
       openWhatsAppForLead(lead);
     } finally {

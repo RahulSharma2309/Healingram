@@ -18,7 +18,8 @@ import {
   type ReactNode,
 } from "react";
 import { getUserName, isLoggedIn, logOut } from "../lib/auth";
-import { getHeaderItem, type NavLinkItem } from "../navigation/headerConfig";
+import { buildDestinationsMenuFromPlaces, getHeaderItem, type NavLinkItem } from "../navigation/headerConfig";
+import { usePublishedRetreats } from "../lib/api/usePublishedRetreats";
 import healingramMark from "../assets/healingram-mark.png";
 
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -411,8 +412,10 @@ export function CustomerHeader() {
   const item8 = getHeaderItem(8);
   const item9 = getHeaderItem(9);
 
+  const { places } = usePublishedRetreats();
   const typeItems = item3.getMenuItems?.() ?? [];
-  const destinationItems = item4.getMenuItems?.() ?? [];
+  const destinationItems =
+    places.length > 0 ? buildDestinationsMenuFromPlaces(places) : (item4.getMenuItems?.() ?? []);
 
   const closeAll = useCallback(() => {
     setOpenMenu(null);
@@ -441,9 +444,12 @@ export function CustomerHeader() {
     desktopActions = (
       <>
         {/* Item 11 — shell until Tab 11 spec */}
-        <span className="text-sm font-medium text-gray-500 cursor-default" title="Awaiting Tab 11 spec">
+        <Link
+          to="/dashboard?tab=trips"
+          className="text-sm font-medium text-gray-600 hover:text-sage-800"
+        >
           My Trips
-        </span>
+        </Link>
         <Link
           to="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-sage-800"

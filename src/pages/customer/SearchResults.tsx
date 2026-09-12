@@ -12,11 +12,13 @@ import {
   isLocationValidForProgramme,
   type LaunchProgrammeTheme,
 } from "../../data/launchSupply";
+import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
 
 export function SearchResults() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { retreats: inventory, source } = usePublishedRetreats();
 
   const needId = params.get("need");
   const programmeParam = params.get("programme") as LaunchProgrammeTheme | null;
@@ -36,16 +38,16 @@ export function SearchResults() {
     (programmeParam ? getHeroDiscoveryByProgramme(programmeParam)?.label : undefined);
 
   const needMatches = useMemo(
-    () => filterLaunchRetreats({ programmes }),
-    [programmes],
+    () => filterLaunchRetreats({ programmes, inventory }),
+    [programmes, inventory],
   );
 
   const locationGroups = useMemo(
-    () => getAvailableLocationGroups(null, programmes),
-    [programmes],
+    () => getAvailableLocationGroups(null, programmes, inventory),
+    [programmes, inventory],
   );
 
-  const locationValid = isLocationValidForProgramme(null, locationParam, programmes);
+  const locationValid = isLocationValidForProgramme(null, locationParam, programmes, inventory);
   const location = locationValid ? locationParam : "";
 
   useEffect(() => {
@@ -63,8 +65,9 @@ export function SearchResults() {
         location: location || null,
         checkIn,
         checkOut,
+        inventory,
       }),
-    [programmes, location, checkIn, checkOut],
+    [programmes, location, checkIn, checkOut, inventory],
   );
 
   const updateParams = (patch: Record<string, string | null>) => {
@@ -85,6 +88,25 @@ export function SearchResults() {
     navigate(next.toString() ? `${base}?${next}` : base);
   };
 
+  if (source === "loading") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <p className="text-sage-600">Loading published retreats from the catalog…</p>
+      </div>
+    );
+  }
+
+  if (source === "error") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800 mb-3">Catalog unavailable</h1>
+        <p className="text-sage-600">
+          Start Healingram.Gateway on port 5000 and Healingram.Api on port 5080, then refresh.
+        </p>
+      </div>
+    );
+  }
+
   const noInventoryForNeed = needMatches.length === 0 && programmes.length > 0;
 
   return (
@@ -93,7 +115,7 @@ export function SearchResults() {
         {needLabel ? `${needLabel} retreats` : "Explore retreats"}
       </h1>
       <p className="text-sm text-gray-600 mb-5">
-        Curated from Healingram’s launch partners in Karnataka and Kerala.
+        Results from published catalog inventory.
       </p>
 
       {!noInventoryForNeed && (
@@ -144,7 +166,7 @@ export function SearchResults() {
           </h2>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
             <Link
-              to="/search"
+              to="/retreats"
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-500 text-center"
             >
               Explore all retreats

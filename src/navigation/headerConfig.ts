@@ -82,11 +82,17 @@ export function buildRetreatTypesMenuFromLaunchSupply(): NavLinkItem[] {
     { id: "type-weekend", theme: "weekend", label: "Weekend Wellness" },
   ];
 
-  return types.map((t) => ({
-    id: t.id,
-    label: t.label,
-    to: `/retreats?programme=${t.theme}`,
-  }));
+  return types.map((t) => {
+    const need =
+      t.theme === "weekend"
+        ? "weekend-wellness"
+        : t.theme.replace(/_/g, "-");
+    return {
+      id: t.id,
+      label: t.label,
+      to: `/retreats?need=${need}`,
+    };
+  });
 }
 
 /** Destinations — Karnataka + Kerala localities from launch supply only */
@@ -97,7 +103,7 @@ export function buildDestinationsMenuFromLaunchSupply(): NavLinkItem[] {
     items.push({
       id: `dest-ka-${locality}`,
       label: locality,
-      to: `/search?region=karnataka&location=${encodeURIComponent(locality)}`,
+      to: `/retreats?state=karnataka&location=${encodeURIComponent(locality)}`,
       group: LAUNCH_DESTINATIONS.karnataka.regionLabel,
     });
   }
@@ -106,11 +112,34 @@ export function buildDestinationsMenuFromLaunchSupply(): NavLinkItem[] {
     items.push({
       id: `dest-kl-${locality}`,
       label: locality,
-      to: `/search?region=kerala&location=${encodeURIComponent(locality)}`,
+      to: `/retreats?state=kerala&location=${encodeURIComponent(locality)}`,
       group: LAUNCH_DESTINATIONS.kerala.regionLabel,
     });
   }
 
+  return items;
+}
+
+export function buildDestinationsMenuFromPlaces(
+  states: { slug: string; label: string; cities: { slug: string; label: string }[] }[],
+): NavLinkItem[] {
+  const items: NavLinkItem[] = [];
+  for (const state of states) {
+    items.push({
+      id: `dest-state-${state.slug}`,
+      label: `All ${state.label}`,
+      to: `/retreats?state=${encodeURIComponent(state.slug)}`,
+      group: state.label,
+    });
+    for (const city of state.cities) {
+      items.push({
+        id: `dest-${state.slug}-${city.slug}`,
+        label: city.label,
+        to: `/retreats?state=${encodeURIComponent(state.slug)}&location=${encodeURIComponent(city.label)}`,
+        group: state.label,
+      });
+    }
+  }
   return items;
 }
 

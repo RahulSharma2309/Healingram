@@ -5,17 +5,17 @@
 
 import {
   EXPLORE_BY_NEED_CARDS,
+  HERO_DISCOVERY_OPTIONS,
   LAUNCH_DESTINATIONS,
   LAUNCH_RETREATS,
   filterLaunchRetreats,
   getNeedLabel,
   getProgrammesForNeedId,
   type LaunchProgrammeTheme,
-  type LaunchRegion,
   type LaunchRetreat,
 } from "./launchSupply";
 import { getFromAmount } from "../lib/pricing";
-import { getProgrammesForRetreat } from "./programmePricing";
+import { defaultNightsForThemes, getProgrammesForRetreat } from "./programmePricing";
 
 export type DurationBandId = "weekend" | "4-5" | "6-8" | "10-14" | "21";
 
@@ -50,7 +50,7 @@ export type LocationFilterOption = {
   /** Unique key — locality string or `region:karnataka` */
   id: string;
   label: string;
-  region: LaunchRegion;
+  region: string;
   locality: string | null;
   count: number;
 };
@@ -124,6 +124,12 @@ export function getRetreatDurationNights(
     if (programmeConstraint?.length && !programmeConstraint.includes(theme)) continue;
     for (const n of row.supportedDurations) nights.add(n);
   }
+  if (nights.size === 0) {
+    const themes = programmeConstraint?.length
+      ? retreat.programmes.filter((p) => programmeConstraint.includes(p))
+      : retreat.programmes;
+    for (const n of defaultNightsForThemes(themes)) nights.add(n);
+  }
   return [...nights].sort((a, b) => a - b);
 }
 
@@ -143,9 +149,10 @@ export function retreatMatchesLocationKeys(
   if (locationKeys.length === 0) return true;
   return locationKeys.some((key) => {
     if (key.startsWith("region:")) {
-      return retreat.region === (key.slice("region:".length) as LaunchRegion);
+      return retreat.region === key.slice("region:".length);
     }
-    return retreat.locality === key;
+    const localitySlug = retreat.locality.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    return retreat.locality === key || localitySlug === key;
   });
 }
 
@@ -155,7 +162,10 @@ export type BrowseFilterInput = {
   durations?: DurationBandId[];
 };
 
-export function filterBrowseRetreats(input: BrowseFilterInput = {}): LaunchRetreat[] {
+export function filterBrowseRetreats(
+  input: BrowseFilterInput = {},
+  inventory: LaunchRetreat[] = LAUNCH_RETREATS,
+): LaunchRetreat[] {
   const needs = input.needs ?? [];
   const programmes = programmesForNeeds(needs);
   const locations = input.locations ?? [];
@@ -163,6 +173,7 @@ export function filterBrowseRetreats(input: BrowseFilterInput = {}): LaunchRetre
 
   let list = filterLaunchRetreats({
     programmes: programmes.length > 0 ? programmes : null,
+    inventory,
   });
 
   list = list.filter((r) => retreatMatchesLocationKeys(r, locations));
@@ -180,15 +191,19 @@ export function filterBrowseRetreats(input: BrowseFilterInput = {}): LaunchRetre
 /** Need options with counts given location/duration filters (each need counted independently). */
 export function getNeedOptionsWithCounts(
   state: Pick<AllRetreatsBrowseState, "needs" | "locations" | "durations">,
+  inventory: LaunchRetreat[] = LAUNCH_RETREATS,
 ): FilterOptionWithCount[] {
   const options = getAllNeedFilterOptions();
   return options
     .map((opt) => {
-      const count = filterBrowseRetreats({
-        needs: [opt.id],
-        locations: state.locations,
-        durations: state.durations,
-      }).length;
+      const count = filterBrowseRetreats(
+        {
+          needs: [opt.id],
+          locations: state.locations,
+          durations: state.durations,
+        },
+        inventory,
+      ).length;
       return { id: opt.id, label: opt.label, count };
     })
     .filter((o) => o.count > 0 || state.needs.includes(o.id));
@@ -196,16 +211,19 @@ export function getNeedOptionsWithCounts(
 
 export function getLocationOptionsWithCounts(
   state: Pick<AllRetreatsBrowseState, "needs" | "locations" | "durations">,
-): { region: LaunchRegion; regionLabel: string; options: LocationFilterOption[] }[] {
-  const base = filterBrowseRetreats({
-    needs: state.needs,
-    locations: [],
-    durations: state.durations,
-  });
+  inventory: LaunchRetreat[] = LAUNCH_RETREATS,
+): { region: string; regionLabel: string; options: LocationFilterOption[] }[] {
+  const base = filterBrowseRetreats(
+    {
+      needs: state.needs,
+      locations: [],
+      durations: state.durations,
+    },
+    inventory,
+  );
 
-  const regionOrder: LaunchRegion[] = ["karnataka", "kerala"];
-  const groups: { region: LaunchRegion; regionLabel: string; options: LocationFilterOption[] }[] =
-    [];
+  const regionOrder = [...new Set(["karnataka", "kerala", ...base.map((r) => r.region)])];
+  const groups: { region: string; regionLabel: string; options: LocationFilterOption[] }[] = [];
 
   for (const region of regionOrder) {
     const inRegion = base.filter((r) => r.region === region);
@@ -218,32 +236,42 @@ export function getLocationOptionsWithCounts(
 
     const options: LocationFilterOption[] = [];
 
-    // Region-level option (e.g. all Kerala)
-    const regionCount = filterBrowseRetreats({
-      needs: state.needs,
-      locations: [`region:${region}`],
-      durations: state.durations,
-    }).length;
+    const regionCount = filterBrowseRetreats(
+      {
+        needs: state.needs,
+        locations: [`region:${region}`],
+        durations: state.durations,
+      },
+      inventory,
+    ).length;
     if (regionCount > 0 || state.locations.includes(`region:${region}`)) {
+      const known =
+        region === "karnataka" || region === "kerala" ? LAUNCH_DESTINATIONS[region] : undefined;
       options.push({
         id: `region:${region}`,
-        label: region === "karnataka" ? "Bengaluru & nearby" : "Kerala",
+        label:
+          region === "karnataka"
+            ? "Bengaluru & nearby"
+            : (known?.regionLabel ?? inRegion[0]?.stateLabel ?? region),
         region,
         locality: null,
         count: regionCount,
       });
     }
 
-    const destLocalities = LAUNCH_DESTINATIONS[region].localities;
+    const destLocalities =
+      region === "karnataka" || region === "kerala" ? LAUNCH_DESTINATIONS[region].localities : [];
     for (const locality of destLocalities) {
       const count = localityCounts.get(locality) ?? 0;
       if (count <= 0 && !state.locations.includes(locality)) continue;
-      // Recount with this locality alone against other filters
-      const withLoc = filterBrowseRetreats({
-        needs: state.needs,
-        locations: [locality],
-        durations: state.durations,
-      }).length;
+      const withLoc = filterBrowseRetreats(
+        {
+          needs: state.needs,
+          locations: [locality],
+          durations: state.durations,
+        },
+        inventory,
+      ).length;
       if (withLoc <= 0 && !state.locations.includes(locality)) continue;
       options.push({
         id: locality,
@@ -254,15 +282,17 @@ export function getLocationOptionsWithCounts(
       });
     }
 
-    // Any localities not in dest list
-    for (const [locality, _] of localityCounts) {
+    for (const [locality] of localityCounts) {
       if ((destLocalities as readonly string[]).includes(locality)) continue;
       if (options.some((o) => o.id === locality)) continue;
-      const withLoc = filterBrowseRetreats({
-        needs: state.needs,
-        locations: [locality],
-        durations: state.durations,
-      }).length;
+      const withLoc = filterBrowseRetreats(
+        {
+          needs: state.needs,
+          locations: [locality],
+          durations: state.durations,
+        },
+        inventory,
+      ).length;
       if (withLoc <= 0 && !state.locations.includes(locality)) continue;
       options.push({
         id: locality,
@@ -274,9 +304,11 @@ export function getLocationOptionsWithCounts(
     }
 
     if (options.length > 0) {
+      const known =
+        region === "karnataka" || region === "kerala" ? LAUNCH_DESTINATIONS[region] : undefined;
       groups.push({
         region,
-        regionLabel: LAUNCH_DESTINATIONS[region].regionLabel,
+        regionLabel: known?.regionLabel ?? inRegion[0]?.stateLabel ?? region,
         options: options.filter((o) => o.count > 0 || state.locations.includes(o.id)),
       });
     }
@@ -287,13 +319,17 @@ export function getLocationOptionsWithCounts(
 
 export function getDurationOptionsWithCounts(
   state: Pick<AllRetreatsBrowseState, "needs" | "locations" | "durations">,
+  inventory: LaunchRetreat[] = LAUNCH_RETREATS,
 ): FilterOptionWithCount<DurationBandId>[] {
   return DURATION_BANDS.map((band) => {
-    const count = filterBrowseRetreats({
-      needs: state.needs,
-      locations: state.locations,
-      durations: [band.id],
-    }).length;
+    const count = filterBrowseRetreats(
+      {
+        needs: state.needs,
+        locations: state.locations,
+        durations: [band.id],
+      },
+      inventory,
+    ).length;
     return { id: band.id, label: band.label, count };
   }).filter((o) => o.count > 0 || state.durations.includes(o.id));
 }
@@ -368,11 +404,16 @@ export function parseCommaList(raw: string | null): string[] {
 
 export function parseBrowseStateFromParams(params: URLSearchParams): AllRetreatsBrowseState {
   const needs = parseCommaList(params.get("need"));
+  const programme = params.get("programme");
+  if (programme) {
+    const fromHero = HERO_DISCOVERY_OPTIONS.find((o) => o.programme === programme);
+    needs.push(fromHero?.id ?? programme.replace(/_/g, "-"));
+  }
   const locations: string[] = [];
   const stateParam = parseCommaList(params.get("state"));
   for (const s of stateParam) {
-    if (s === "karnataka" || s === "kerala") locations.push(`region:${s}`);
-    else if (s === "bengaluru") locations.push("region:karnataka");
+    if (s === "bengaluru") locations.push("region:karnataka");
+    else locations.push(`region:${s}`);
   }
   for (const loc of parseCommaList(params.get("location"))) {
     if (loc === "Bengaluru" || loc.toLowerCase() === "bengaluru") {
@@ -381,9 +422,8 @@ export function parseBrowseStateFromParams(params: URLSearchParams): AllRetreats
       locations.push(loc);
     }
   }
-  // region= from older Explore links
   const region = params.get("region");
-  if (region === "karnataka" || region === "kerala") {
+  if (region) {
     const key = `region:${region}`;
     if (!locations.includes(key)) locations.push(key);
   }
@@ -437,7 +477,13 @@ export function activeFilterChips(state: AllRetreatsBrowseState): {
   for (const loc of state.locations) {
     let label = loc;
     if (loc === "region:karnataka") label = "Bengaluru & nearby";
-    else if (loc === "region:kerala") label = "Kerala";
+    else if (loc.startsWith("region:")) {
+      label = loc
+        .slice("region:".length)
+        .split("-")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+    }
     chips.push({
       key: `loc:${loc}`,
       label,

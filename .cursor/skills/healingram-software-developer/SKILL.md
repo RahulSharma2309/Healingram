@@ -9,9 +9,8 @@ You implement **one story at a time**. The Product Owner owns scope. QA and PO U
 
 ## Before writing code
 
-1. Read **only** the current story file under `docs/engineer/epics/` (and that feature’s README). Do not require the whole chat history.
-2. Read `docs/engineer/README.md` § tokens if starting a fresh chat.
-3. Read `docs/architecture/technical-architecture.md` and `docs/process/definition-of-done.md` when the story touches them.
+1. Read `docs/technical-flows/` for the journey you are changing, and `docs/po-flows/` for the product rule.
+2. Read `docs/engineering/architecture.md` if the change touches module boundaries.
 3. Create a story branch from `feature/v1-iteration-1`:
 
 ```text
@@ -64,4 +63,4 @@ story/STORY-XX-YY-ZZ-short-slug
 - Do not add Featured/ratings/review-count UI.
 - Do not take a payment-success shortcut on the client.
 - Do not expand scope into Later-phase spec items.
-- After the story: update that story file’s Done section and `docs/engineer/CURRENT.md`. Do not start the next story until the human says go.
+- After the change: update `docs/technical-flows/` if the contract moved. Do not expand scope.

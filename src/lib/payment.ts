@@ -1,18 +1,25 @@
 /**
- * Payment service interface — supports MARKETPLACE_SPLIT and PARTNER_DIRECT.
- * Does not mark bookings paid from browser success pages.
+ * Payment helpers. The browser never marks a booking paid.
+ * Only POST /api/payment/webhooks/fake (server) can set paid.
  */
 
 import type { SettlementMode } from "../data/programmePricing";
+import {
+  getPaymentIntentById,
+  postFakePaymentWebhook,
+  postPaymentIntent,
+  type ServerPaymentIntent,
+} from "./api/payment";
 import { applyPaymentWebhook, getAvailabilityRequest } from "./availabilityRequests";
 
 export type PaymentIntent = {
   requestId: string;
+  serverIntentId?: string;
   amount: number;
   currency: "INR";
   settlementMode: SettlementMode;
-  status: "created" | "awaiting_provider" | "cancelled";
-  provider: "placeholder";
+  status: "created" | "awaiting_provider" | "cancelled" | "ready";
+  provider: "fake" | "placeholder";
   createdAt: string;
 };
 
@@ -34,7 +41,48 @@ function writeIntents(intents: PaymentIntent[]): void {
   }
 }
 
-export function createPaymentIntent(requestId: string): PaymentIntent | { error: string } {
+function sessionGet(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function sessionSet(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function idempotencyKeyFor(publicId: string): string {
+  const key = `healingram_pay_idem_${publicId}`;
+  const existing = sessionGet(key);
+  if (existing) return existing;
+  const next = crypto.randomUUID();
+  sessionSet(key, next);
+  return next;
+}
+
+export function rememberedIntentId(publicId: string): string | null {
+  return sessionGet(`healingram_pay_intent_${publicId}`);
+}
+
+function rememberIntentId(publicId: string, intentId: string): void {
+  sessionSet(`healingram_pay_intent_${publicId}`, intentId);
+}
+
+function persistLocalIntent(intent: PaymentIntent): void {
+  const all = readIntents().filter((i) => i.requestId !== intent.requestId);
+  all.unshift(intent);
+  writeIntents(all);
+}
+
+export async function createPaymentIntent(
+  requestId: string,
+): Promise<PaymentIntent | { error: string }> {
   const request = getAvailabilityRequest(requestId);
   if (!request) return { error: "Request not found" };
   if (request.status !== "PAYMENT_PENDING") {
@@ -44,20 +92,27 @@ export function createPaymentIntent(requestId: string): PaymentIntent | { error:
     return { error: "Final payable amount not confirmed" };
   }
 
-  const intent: PaymentIntent = {
-    requestId,
-    amount: request.finalPayableAmount,
-    currency: "INR",
-    settlementMode: request.settlementMode,
-    status: "awaiting_provider",
-    provider: "placeholder",
-    createdAt: new Date().toISOString(),
-  };
-
-  const all = readIntents().filter((i) => i.requestId !== requestId);
-  all.unshift(intent);
-  writeIntents(all);
-  return intent;
+  try {
+    const server = await postPaymentIntent(requestId, idempotencyKeyFor(requestId));
+    rememberIntentId(requestId, server.id);
+    const intent: PaymentIntent = {
+      requestId,
+      serverIntentId: server.id,
+      amount: request.finalPayableAmount,
+      currency: "INR",
+      settlementMode: request.settlementMode,
+      status: "ready",
+      provider: "fake",
+      createdAt: new Date().toISOString(),
+    };
+    persistLocalIntent(intent);
+    return intent;
+  } catch {
+    return {
+      error:
+        "Could not create a payment intent on the server. Confirm availability as a partner first, then try again. No payment was taken.",
+    };
+  }
 }
 
 export function getPaymentIntent(requestId: string): PaymentIntent | undefined {
@@ -65,57 +120,79 @@ export function getPaymentIntent(requestId: string): PaymentIntent | undefined {
 }
 
 /**
- * Placeholder “Pay securely” — opens provider handoff message only.
- * Does NOT mark the request paid.
+ * Opens payment-ready handoff only. Does not mark the request paid.
  */
-export function startPlaceholderCheckout(requestId: string): {
+export async function startPlaceholderCheckout(requestId: string): Promise<{
   ok: boolean;
   message: string;
-} {
-  const intent = createPaymentIntent(requestId);
+  intentId?: string;
+}> {
+  const intent = await createPaymentIntent(requestId);
   if ("error" in intent) return { ok: false, message: intent.error };
 
   if (intent.settlementMode === "PARTNER_DIRECT") {
     return {
       ok: true,
+      intentId: intent.serverIntentId,
       message:
-        "Partner-direct settlement is configured. Payment will be completed with the retreat once the gateway is connected. No payment was taken.",
+        "Partner-direct settlement is configured. The retreat will complete payment separately. No payment was taken here, and this page did not mark the booking paid.",
     };
   }
 
   return {
     ok: true,
+    intentId: intent.serverIntentId,
     message:
-      "Marketplace split payment gateway is not connected yet. No payment was taken. Status remains PAYMENT_PENDING until a verified webhook confirms payment.",
+      "Payment intent is ready on the server. Status stays payment-pending until a verified webhook confirms it. This page does not mark the booking paid.",
   };
 }
 
 /**
- * Admin-only simulator for a verified webhook (demo / staging).
- * Production must receive this from the payment provider server-side.
+ * Local admin stand-in for the fake provider. Calls the server webhook.
+ * Does not mark paid unless the server returns status paid.
  */
-export function simulateVerifiedPaymentWebhook(requestId: string): {
+export async function simulateVerifiedPaymentWebhook(requestId: string): Promise<{
   ok: boolean;
   message: string;
-} {
+}> {
   const request = getAvailabilityRequest(requestId);
   if (!request) return { ok: false, message: "Request not found" };
   if (request.finalPayableAmount == null) {
     return { ok: false, message: "No final amount" };
   }
 
-  const updated = applyPaymentWebhook(requestId, {
-    providerPaymentId: `demo_wh_${Date.now()}`,
-    amount: request.finalPayableAmount,
-    verified: true,
-  });
+  let intentId = rememberedIntentId(requestId);
+  try {
+    if (!intentId) {
+      const created = await postPaymentIntent(requestId, idempotencyKeyFor(requestId));
+      intentId = created.id;
+      rememberIntentId(requestId, created.id);
+    }
 
-  if (!updated || updated.status !== "CONFIRMED") {
-    return { ok: false, message: "Webhook did not confirm payment" };
+    const paid = await postFakePaymentWebhook(intentId, `demo_wh_${crypto.randomUUID()}`);
+    if (paid.status !== "paid") {
+      return { ok: false, message: "Server did not mark this intent paid." };
+    }
+
+    applyPaymentWebhook(requestId, {
+      providerPaymentId: paid.id,
+      amount: request.finalPayableAmount,
+      verified: true,
+    });
+
+    return {
+      ok: true,
+      message: `Verified webhook applied. Intent ${paid.id} is paid.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      message:
+        "Webhook was not accepted by the server. Sign in as admin/partner if needed, confirm availability on the API, then try again. The browser did not mark this paid.",
+    };
   }
+}
 
-  return {
-    ok: true,
-    message: `Verified webhook applied. Booking ${updated.bookingId} confirmed.`,
-  };
+export async function refreshIntentStatus(intentId: string): Promise<ServerPaymentIntent> {
+  return getPaymentIntentById(intentId);
 }

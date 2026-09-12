@@ -32,7 +32,9 @@ export type LaunchProgrammeTheme =
 export type LaunchRetreat = {
   id: string;
   name: string;
-  region: LaunchRegion;
+  region: string;
+  /** Display name for the state when it is not in the old KA/KL map */
+  stateLabel?: string;
   /** City / locality used for destination nav */
   locality: string;
   /** Programme themes this property is known to offer (launch-relevant only) */
@@ -461,6 +463,7 @@ export type LaunchRetreatFilter = {
   /** Reserved for future availability — stored but not inventing inventory cuts */
   checkIn?: string | null;
   checkOut?: string | null;
+  inventory?: LaunchRetreat[];
 };
 
 export function filterLaunchRetreats(filter: LaunchRetreatFilter = {}): LaunchRetreat[] {
@@ -471,7 +474,8 @@ export function filterLaunchRetreats(filter: LaunchRetreatFilter = {}): LaunchRe
         ? [filter.programme]
         : null;
 
-  return LAUNCH_RETREATS.filter(
+  const inventory = filter.inventory ?? LAUNCH_RETREATS;
+  return inventory.filter(
     (r) =>
       retreatMatchesAnyProgramme(r, programmeFilter) &&
       retreatMatchesLocation(r, filter.location),
@@ -481,11 +485,11 @@ export function filterLaunchRetreats(filter: LaunchRetreatFilter = {}): LaunchRe
 export type LocationOptionWithCount = {
   locality: string;
   count: number;
-  region: LaunchRegion;
+  region: string;
 };
 
 export type LocationFilterGroup = {
-  region: LaunchRegion;
+  region: string;
   regionLabel: string;
   options: LocationOptionWithCount[];
 };
@@ -497,28 +501,37 @@ export type LocationFilterGroup = {
 export function getAvailableLocationGroups(
   programme?: LaunchProgrammeTheme | null,
   programmes?: LaunchProgrammeTheme[] | null,
+  inventory?: LaunchRetreat[],
 ): LocationFilterGroup[] {
   const matches = filterLaunchRetreats({
     programme: programmes?.length ? null : programme,
     programmes: programmes?.length ? programmes : null,
+    inventory,
   });
-  const counts = new Map<string, { count: number; region: LaunchRegion }>();
+  const counts = new Map<string, { count: number; region: string; stateLabel?: string }>();
 
   for (const r of matches) {
     const prev = counts.get(r.locality);
     if (prev) prev.count += 1;
-    else counts.set(r.locality, { count: 1, region: r.region });
+    else counts.set(r.locality, { count: 1, region: r.region, stateLabel: r.stateLabel });
   }
 
-  const regionOrder: LaunchRegion[] = ["karnataka", "kerala"];
+  const regionOrder = [
+    ...new Set([
+      "karnataka",
+      "kerala",
+      ...matches.map((r) => r.region),
+    ]),
+  ];
   const groups: LocationFilterGroup[] = [];
 
   for (const region of regionOrder) {
-    const dest = LAUNCH_DESTINATIONS[region];
+    const dest =
+      region === "karnataka" || region === "kerala" ? LAUNCH_DESTINATIONS[region] : undefined;
     const options: LocationOptionWithCount[] = [];
     const seen = new Set<string>();
 
-    for (const locality of dest.localities) {
+    for (const locality of dest?.localities ?? []) {
       const meta = counts.get(locality);
       if (!meta || meta.count <= 0) continue;
       options.push({ locality, count: meta.count, region });
@@ -531,9 +544,16 @@ export function getAvailableLocationGroups(
     }
 
     if (options.length > 0) {
+      const sample = matches.find((r) => r.region === region);
       groups.push({
         region,
-        regionLabel: dest.regionLabel,
+        regionLabel:
+          dest?.regionLabel ??
+          sample?.stateLabel ??
+          region
+            .split("-")
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" "),
         options,
       });
     }
@@ -547,9 +567,10 @@ export function isLocationValidForProgramme(
   programme: LaunchProgrammeTheme | null | undefined,
   location: string | null | undefined,
   programmes?: LaunchProgrammeTheme[] | null,
+  inventory?: LaunchRetreat[],
 ): boolean {
   if (!location || location === "all") return true;
-  const groups = getAvailableLocationGroups(programme, programmes);
+  const groups = getAvailableLocationGroups(programme, programmes, inventory);
   return groups.some((g) => g.options.some((o) => o.locality === location));
 }
 

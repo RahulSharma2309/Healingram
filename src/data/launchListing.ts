@@ -190,7 +190,11 @@ export function getRetreatListingView(id: string | undefined): RetreatListingVie
   const retreat = getLaunchRetreatById(id);
   if (!retreat) return null;
 
-  const regionLabel = LAUNCH_DESTINATIONS[retreat.region].regionLabel;
+  const dest =
+    retreat.region === "karnataka" || retreat.region === "kerala"
+      ? LAUNCH_DESTINATIONS[retreat.region]
+      : undefined;
+  const regionLabel = dest?.regionLabel ?? retreat.stateLabel ?? retreat.region;
   const nearBengaluru = ["Whitefield", "Devanahalli", "Nelamangala", "Doddaballapur"].includes(
     retreat.locality,
   );

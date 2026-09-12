@@ -137,7 +137,7 @@ export function AvailabilityRequestModal({
 
   if (!open) return null;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!localCheckIn) {
@@ -215,34 +215,38 @@ export function AvailabilityRequestModal({
             : "auto",
     });
 
-    const request = createAvailabilityRequest({
-      customerId: getCustomerId(),
-      customerName: name.trim(),
-      customerEmail: email.trim(),
-      customerPhone: phone.trim(),
-      countryCode,
-      retreatId: draft.retreatId,
-      retreatName: draft.retreatName,
-      programmeId: draft.programmeId,
-      programmeName: draft.programmeName,
-      durationNights: nights,
-      durationUnit: draft.durationUnit,
-      checkIn: localCheckIn,
-      checkOut: resolvedCheckOut,
-      guests: guestCount,
-      occupancy: calc?.occupancy ?? draft.occupancy,
-      roomType: calc?.roomType ?? draft.roomType,
-      displayedPrice: livePriceLabel,
-      priceStatus: pricing.priceStatus,
-      priceSnapshot: snapshot,
-      settlementMode: pricing.settlementMode,
-      source: draft.source ?? "listing",
-      customerNotes: notes.trim(),
-    });
-
-    setSubmitting(false);
-    onClose();
-    navigate(`/requests/${request.requestId}/received`);
+    try {
+      const request = await createAvailabilityRequest({
+        customerId: getCustomerId(),
+        customerName: name.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone.trim(),
+        countryCode,
+        retreatId: draft.retreatId,
+        retreatName: draft.retreatName,
+        programmeId: draft.programmeId,
+        programmeName: draft.programmeName,
+        durationNights: nights,
+        durationUnit: draft.durationUnit,
+        checkIn: localCheckIn,
+        checkOut: resolvedCheckOut,
+        guests: guestCount,
+        occupancy: calc?.occupancy ?? draft.occupancy,
+        roomType: calc?.roomType ?? draft.roomType,
+        displayedPrice: livePriceLabel,
+        priceStatus: pricing.priceStatus,
+        priceSnapshot: snapshot,
+        settlementMode: pricing.settlementMode,
+        source: draft.source ?? "listing",
+        customerNotes: notes.trim(),
+      });
+      onClose();
+      navigate(`/requests/${request.requestId}/received`);
+    } catch {
+      setError("Could not submit your availability request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

@@ -3,4 +3,13 @@
     <ProjectReference Include="..\..\Healingram.BuildingBlocks\Healingram.BuildingBlocks.csproj" />
     <ProjectReference Include="..\..\Healingram.Contracts\Healingram.Contracts.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\db\002_catalog_public.sql">
+      <LogicalName>Healingram.Modules.Catalog.sql.002_catalog_public.sql</LogicalName>
+    </EmbeddedResource>
+    <InternalsVisibleTo Include="Healingram.Modules.Catalog.Tests" />
+  </ItemGroup>
 </Project>

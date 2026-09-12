@@ -1,5 +1,6 @@
 using Healingram.BuildingBlocks.Health;
 using Healingram.BuildingBlocks.Modules;
+using Healingram.BuildingBlocks.Notifications;
 using Healingram.BuildingBlocks.Observability;
 using Healingram.BuildingBlocks.Persistence;
 using Healingram.Modules.Availability;
@@ -52,6 +53,8 @@ foreach (var module in modules)
     builder.Services.AddSingleton<IAppModule>(module);
 }
 
+builder.Services.AddHealingramOutbox(builder.Configuration);
+
 var otlp = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(r => r.AddService("healingram-api"))
@@ -68,6 +71,8 @@ builder.Services.AddOpenTelemetry()
 var app = builder.Build();
 
 app.UseHealingramCorrelationId();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseSerilogRequestLogging();
 
 if (app.Configuration.GetValue("Schema:ApplyOnStartup", true))

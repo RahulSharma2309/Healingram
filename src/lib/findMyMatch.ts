@@ -9,7 +9,6 @@ import {
   getRetreatDisplayTags,
   type LaunchProgrammeTheme,
   type LaunchRetreat,
-  type LaunchRegion,
 } from "../data/launchSupply";
 
 export type MatchNeedId =
@@ -273,6 +272,13 @@ export function rankFindMyMatch(answers: FindMyMatchAnswers): {
   return { exact: [], closest };
 }
 
-export function regionLabel(region: LaunchRegion): string {
-  return LAUNCH_DESTINATIONS[region].regionLabel;
+export function regionLabel(region: string): string {
+  if (region === "karnataka" || region === "kerala") {
+    return LAUNCH_DESTINATIONS[region].regionLabel;
+  }
+  return region
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

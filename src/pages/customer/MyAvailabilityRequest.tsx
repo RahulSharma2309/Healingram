@@ -1,10 +1,12 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { getAvailabilityByPublicId } from "../../lib/api/availability";
 import {
   customerAcceptAlternative,
   customerDeclineAlternative,
   customerRequestAnotherOption,
   getAvailabilityRequest,
+  mergeServerAvailability,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
@@ -14,13 +16,37 @@ export function MyAvailabilityRequest() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const [request, setRequest] = useState<AvailabilityRequest | undefined>();
+  const [lookup, setLookup] = useState<"loading" | "ready" | "missing">("loading");
 
   const refresh = () => {
-    if (requestId) setRequest(getAvailabilityRequest(requestId));
+    if (!requestId) return;
+    const local = getAvailabilityRequest(requestId);
+    if (local) setRequest(local);
   };
 
   useEffect(() => {
-    refresh();
+    if (!requestId) {
+      setLookup("missing");
+      return;
+    }
+
+    const local = getAvailabilityRequest(requestId);
+    if (local) {
+      setRequest(local);
+      setLookup("ready");
+    } else {
+      setLookup("loading");
+    }
+
+    getAvailabilityByPublicId(requestId)
+      .then((dto) => {
+        setRequest(mergeServerAvailability(dto));
+        setLookup("ready");
+      })
+      .catch(() => {
+        setLookup(getAvailabilityRequest(requestId) ? "ready" : "missing");
+      });
+
     const onChange = () => refresh();
     window.addEventListener("healingram-requests", onChange);
     window.addEventListener("storage", onChange);
@@ -30,7 +56,15 @@ export function MyAvailabilityRequest() {
     };
   }, [requestId]);
 
-  if (!request) {
+  if (lookup === "loading") {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <p className="text-sm text-sage-600">Looking up your availability request…</p>
+      </div>
+    );
+  }
+
+  if (lookup === "missing" || !request) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <h1 className="font-display text-2xl font-bold text-sage-800">Request not found</h1>

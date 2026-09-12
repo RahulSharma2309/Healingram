@@ -3,17 +3,35 @@ const NAME_KEY = "healingram_user_name";
 const EMAIL_KEY = "healingram_user_email";
 const PHONE_KEY = "healingram_user_phone";
 const COUNTRY_KEY = "healingram_user_country";
+const ROLE_KEY = "healingram_user_role";
 
 export type CustomerProfile = {
   name: string;
   email: string;
   phone: string;
   countryCode: string;
+  role?: string;
 };
+
+export function getUserRole(): string {
+  try {
+    return (localStorage.getItem(ROLE_KEY) || "customer").toLowerCase();
+  } catch {
+    return "customer";
+  }
+}
+
+export function homePathForRole(role?: string | null): string {
+  const normalized = (role ?? getUserRole()).trim().toLowerCase();
+  if (normalized === "partner") return "/vendor";
+  if (normalized === "admin") return "/admin";
+  return "/dashboard";
+}
 
 export function isLoggedIn(): boolean {
   try {
-    return localStorage.getItem(AUTH_KEY) === "1";
+    if (localStorage.getItem(AUTH_KEY) === "1") return true;
+    return Boolean(sessionStorage.getItem("healingram_access_token"));
   } catch {
     return false;
   }
@@ -68,6 +86,10 @@ export function logIn(name = "Priya", extras?: Partial<CustomerProfile>): void {
     else if (!localStorage.getItem(COUNTRY_KEY)) {
       localStorage.setItem(COUNTRY_KEY, "+91");
     }
+    if (extras?.role) localStorage.setItem(ROLE_KEY, extras.role.toLowerCase());
+    else if (!localStorage.getItem(ROLE_KEY)) {
+      localStorage.setItem(ROLE_KEY, "customer");
+    }
     window.dispatchEvent(new Event("healingram-auth"));
   } catch {
     /* ignore */
@@ -78,6 +100,9 @@ export function logOut(): void {
   try {
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(NAME_KEY);
+    localStorage.removeItem(ROLE_KEY);
+    sessionStorage.removeItem("healingram_access_token");
+    sessionStorage.removeItem("healingram_refresh_token");
     window.dispatchEvent(new Event("healingram-auth"));
   } catch {
     /* ignore */
