@@ -62,11 +62,16 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
         }
     }
 
-    internal static string MigrationId(string path) => Path.GetFileName(path);
+    internal static string MigrationId(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        var name = Path.GetFileName(normalized);
+        return string.IsNullOrWhiteSpace(name) ? path : name;
+    }
 
     internal static string MigrationVersion(string path)
     {
-        var name = Path.GetFileNameWithoutExtension(path);
+        var name = Path.GetFileNameWithoutExtension(MigrationId(path));
         var digits = new string(name.TakeWhile(char.IsDigit).ToArray());
         return digits.Length > 0 ? digits : name;
     }

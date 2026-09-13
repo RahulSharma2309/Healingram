@@ -11,8 +11,8 @@ public class SchemaInstallerTests
         var files = new[]
         {
             @"C:\db\001_schemas.sql",
-            @"C:\db\010_enterprise_foundation.sql",
-            @"C:\db\011_enterprise_hardening.sql"
+            "/var/db/010_enterprise_foundation.sql",
+            "backend/db/011_enterprise_hardening.sql"
         };
         var applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -30,7 +30,9 @@ public class SchemaInstallerTests
     public void Migration_id_is_the_filename()
     {
         Assert.Equal("011_enterprise_hardening.sql", SchemaInstaller.MigrationId("backend/db/011_enterprise_hardening.sql"));
+        Assert.Equal("011_enterprise_hardening.sql", SchemaInstaller.MigrationId(@"C:\db\011_enterprise_hardening.sql"));
         Assert.Equal("001", SchemaInstaller.MigrationVersion("001_schemas.sql"));
+        Assert.Equal("010", SchemaInstaller.MigrationVersion(@"D:\sql\010_enterprise_foundation.sql"));
     }
 
     [Fact]
