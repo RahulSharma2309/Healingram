@@ -124,7 +124,6 @@ export type NotificationRecord = {
 
 const REQUESTS_KEY = "healingram_availability_requests_v1";
 const NOTIFS_KEY = "healingram_notifications_v1";
-const SEQ_KEY = "healingram_request_seq_v1";
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -143,19 +142,6 @@ function writeJson(key: string, value: unknown): void {
   } catch {
     /* ignore */
   }
-}
-
-function nextRequestId(): string {
-  const year = new Date().getFullYear();
-  let seq = 126;
-  try {
-    seq = Number(localStorage.getItem(SEQ_KEY) || "126");
-    seq += 1;
-    localStorage.setItem(SEQ_KEY, String(seq));
-  } catch {
-    seq = Date.now() % 100000;
-  }
-  return `HR-${year}-${String(seq).padStart(5, "0")}`;
 }
 
 function nextBookingId(): string {
