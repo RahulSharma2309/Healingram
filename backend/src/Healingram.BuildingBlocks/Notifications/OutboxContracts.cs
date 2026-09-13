@@ -18,6 +18,11 @@ public static class NotificationKinds
     public const string PaymentReady = "payment_ready";
     public const string PaymentPaid = "payment_paid";
     public const string BookingConfirmed = "booking_confirmed";
+    public const string AlternativeAccepted = "alternative_accepted";
+    public const string PaymentInitiated = "payment_initiated";
+    public const string BookingCancelled = "booking_cancelled";
+    public const string RefundInitiated = "refund_initiated";
+    public const string RefundCompleted = "refund_completed";
 }
 
 public sealed record OutboxMessage(

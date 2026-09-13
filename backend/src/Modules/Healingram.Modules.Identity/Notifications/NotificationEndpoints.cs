@@ -16,6 +16,8 @@ internal static class NotificationEndpoints
         group.MapGet("/", async (
             ClaimsPrincipal principal,
             IUserInboxPort inbox,
+            int? page,
+            int? pageSize,
             CancellationToken cancellationToken) =>
         {
             if (!AuthEndpoints.TryGetUserId(principal, out var userId))
@@ -23,7 +25,9 @@ internal static class NotificationEndpoints
                 return AuthEndpoints.AuthHttp.Unauthorized("Unauthorized");
             }
 
-            var items = await inbox.ListForUserAsync(userId, cancellationToken);
+            var safePage = page is null or < 1 ? 1 : page.Value;
+            var safeSize = pageSize is null or < 1 ? 20 : Math.Min(pageSize.Value, 100);
+            var items = await inbox.ListForUserAsync(userId, cancellationToken, safePage, safeSize);
             return Results.Ok(new
             {
                 items = items.Select(i => new
@@ -37,7 +41,9 @@ internal static class NotificationEndpoints
                     createdAt = i.CreatedAt,
                     readAt = i.ReadAt,
                     read = i.ReadAt is not null
-                })
+                }),
+                page = safePage,
+                pageSize = safeSize
             });
         });
 

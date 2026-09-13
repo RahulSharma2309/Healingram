@@ -73,20 +73,12 @@ export function getCustomerProfile(): CustomerProfile {
   };
 }
 
-export function saveCustomerProfile(_profile: Partial<CustomerProfile>): void {
-  /* Profile writes go through PATCH /api/users/me. */
-}
-
 export function applyAuthUser(user: AuthUser): void {
   setSessionUser(user);
 }
 
 export function isRegisteredAccount(): boolean {
   return isLoggedIn();
-}
-
-export function logIn(_name?: string, _extras?: Partial<CustomerProfile>): void {
-  /* Session is created by the server. Bootstrap via GET /api/users/me. */
 }
 
 export function logOut(): void {

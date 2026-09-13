@@ -17,7 +17,7 @@ export function PaymentReady() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const [request, setRequest] = useState<AvailabilityRequest | undefined>();
-  const [lookup, setLookup] = useState<"loading" | "ready" | "missing">("loading");
+  const [lookup, setLookup] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [intentId, setIntentId] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function PaymentReady() {
           navigate(`/requests/${requestId}/verify`, { replace: true });
           return;
         }
-        setLookup("missing");
+        setLookup(error instanceof ApiError && error.status === 404 ? "missing" : "error");
       });
 
     fetchTrips()
@@ -84,6 +84,17 @@ export function PaymentReady() {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <p className="text-sm text-sage-600">Checking whether this request is payment-ready…</p>
+      </div>
+    );
+  }
+
+  if (lookup === "error") {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800">Could not load payment</h1>
+        <Link to="/dashboard" className="mt-6 inline-block text-teal-600">
+          My dashboard
+        </Link>
       </div>
     );
   }
@@ -135,8 +146,8 @@ export function PaymentReady() {
   }
 
   const total = request.finalPayableAmount;
-  const base = request.priceSnapshot.baseAmount;
-  const tax = request.priceSnapshot.taxAmount;
+  const base = request.priceSnapshot?.baseAmount ?? null;
+  const tax = request.priceSnapshot?.taxAmount ?? null;
 
   return (
     <div className="max-w-xl mx-auto px-4 py-10">
@@ -162,7 +173,7 @@ export function PaymentReady() {
         <div className="flex justify-between">
           <span>Taxes</span>
           <span>
-            {request.priceSnapshot.taxDisplay === "included"
+            {request.priceSnapshot?.taxDisplay === "included"
               ? "Included"
               : tax != null
                 ? formatInr(tax)
@@ -174,7 +185,7 @@ export function PaymentReady() {
           <span>{total != null ? formatInr(total) : "—"}</span>
         </div>
         <p className="text-xs text-sage-500 pt-2">
-          Settlement mode: {request.settlementMode.replace("_", " ")}
+          Settlement mode: {request.settlementMode?.replace("_", " ") ?? "Not returned by the server"}
         </p>
       </div>
 

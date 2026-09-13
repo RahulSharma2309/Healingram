@@ -1,6 +1,6 @@
 /**
- * Expert / concierge lead store — local MVP “backend”.
- * Captures Talk to an Expert requests for WhatsApp / phone follow-up.
+ * Expert enquiry helpers. Persistence is POST /api/leads.
+ * sessionStorage only holds short-lived referral context for the form.
  */
 
 import { postExpertLead } from "./api/leads";
@@ -106,15 +106,6 @@ export type ExpertReferralContext = {
   checkOut?: string;
 };
 
-export const EXPERT_LEAD_STATUSES: ExpertLeadStatus[] = [
-  "NEW",
-  "CONTACTED",
-  "QUALIFIED",
-  "FOLLOW_UP",
-  "CONVERTED",
-  "CLOSED",
-];
-
 export const PHONE_COUNTRY_CODES = [
   { code: "+91", label: "India (+91)", digits: 10 },
   { code: "+1", label: "US/CA (+1)", digits: 10 },
@@ -124,18 +115,6 @@ export const PHONE_COUNTRY_CODES = [
 ] as const;
 
 const CONTEXT_KEY = "healingram_expert_context_v1";
-const EVENT = "healingram-expert-leads";
-
-let memory: ExpertLead[] = [];
-
-function readLeads(): ExpertLead[] {
-  return memory;
-}
-
-function writeLeads(leads: ExpertLead[]): void {
-  memory = leads;
-  window.dispatchEvent(new Event(EVENT));
-}
 
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
@@ -238,48 +217,7 @@ export async function createExpertLead(input: ExpertLeadInput): Promise<ExpertLe
     throw error instanceof Error ? error : new Error("Could not store that enquiry.");
   }
 
-  const leads = readLeads();
-  leads.unshift(lead);
-  writeLeads(leads);
   return lead;
-}
-
-export function listExpertLeads(): ExpertLead[] {
-  return readLeads().sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
-}
-
-export function getExpertLead(leadId: string): ExpertLead | null {
-  return readLeads().find((l) => l.leadId === leadId) ?? null;
-}
-
-export function updateExpertLeadStatus(
-  leadId: string,
-  status: ExpertLeadStatus,
-): ExpertLead | null {
-  const leads = readLeads();
-  const idx = leads.findIndex((l) => l.leadId === leadId);
-  if (idx < 0) return null;
-  leads[idx] = { ...leads[idx], status, updatedAt: new Date().toISOString() };
-  writeLeads(leads);
-  return leads[idx];
-}
-
-export function addExpertLeadNote(leadId: string, note: string): ExpertLead | null {
-  const trimmed = note.trim();
-  if (!trimmed) return getExpertLead(leadId);
-  const leads = readLeads();
-  const idx = leads.findIndex((l) => l.leadId === leadId);
-  if (idx < 0) return null;
-  const stamp = new Date().toLocaleString("en-IN");
-  leads[idx] = {
-    ...leads[idx],
-    notes: [`${stamp}: ${trimmed}`, ...leads[idx].notes],
-    updatedAt: new Date().toISOString(),
-  };
-  writeLeads(leads);
-  return leads[idx];
 }
 
 export function saveExpertReferralContext(ctx: ExpertReferralContext): void {
@@ -364,9 +302,4 @@ export function openWhatsAppCallLink(normalizedPhone: string): string {
 
 export function telLink(countryCode: string, phoneNumber: string): string {
   return `tel:${normalizePhone(countryCode, phoneNumber)}`;
-}
-
-export function subscribeExpertLeads(onChange: () => void): () => void {
-  window.addEventListener(EVENT, onChange);
-  return () => window.removeEventListener(EVENT, onChange);
 }

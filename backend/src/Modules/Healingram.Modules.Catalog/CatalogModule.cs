@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Healingram.BuildingBlocks.Api;
 using Healingram.BuildingBlocks.Modules;
 using Healingram.Contracts.Catalog;
 using Healingram.Modules.Catalog.Application;
@@ -57,12 +58,14 @@ public sealed class CatalogModule : IAppModule
             string? state,
             string? locality,
             string? duration,
+            int? page,
+            int? pageSize,
             CancellationToken cancellationToken) =>
         {
             var items = await catalog.SearchRetreatsAsync(
                 new RetreatSearchQuery(need, state, locality, duration),
                 cancellationToken);
-            return Results.Ok(new { items });
+            return Results.Ok(PageResult<RetreatCardDto>.Create(items, page, pageSize));
         });
 
         group.MapGet("/retreats/{slug}", async (
@@ -143,6 +146,17 @@ public sealed class CatalogModule : IAppModule
         {
             var page = await catalog.GetContentAsync(slug, cancellationToken);
             return page is null ? Results.NotFound() : Results.Ok(page);
+        });
+        content.MapGet("/homepage", async (CatalogQueryService catalog, CancellationToken cancellationToken) =>
+        {
+            var sections = await catalog.GetHomepageAsync(cancellationToken);
+            return Results.Ok(new { sections });
+        });
+        content.MapGet("/navigation", async (string? menu, CatalogQueryService catalog, CancellationToken cancellationToken) =>
+        {
+            var key = string.IsNullOrWhiteSpace(menu) ? "customer.explore" : menu.Trim();
+            var items = await catalog.GetNavigationAsync(key, cancellationToken);
+            return Results.Ok(new { menu = key, items });
         });
 
         app.MapGet("/api/platform/settings", async (

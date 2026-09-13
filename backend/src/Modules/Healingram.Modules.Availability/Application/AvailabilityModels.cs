@@ -15,7 +15,11 @@ internal sealed record CreateAvailabilityRequest(
     string? CustomerName,
     string? Email,
     string? Phone,
-    Guid? QuoteId = null);
+    Guid? QuoteId = null,
+    string? CheckOut = null,
+    string? Source = null,
+    string? CountryCode = null,
+    string? CustomerNotes = null);
 
 internal sealed record ConfirmAvailabilityRequest(decimal? FinalAmountInr);
 
@@ -64,6 +68,8 @@ internal sealed class AvailabilityRequestEntity
     public DateTimeOffset? PartnerRespondedAt { get; set; }
     public decimal? FinalAmountInr { get; set; }
     public string? AlternativeJson { get; set; }
+    public Guid? InventoryHoldId { get; set; }
+    public string? BookingNumber { get; set; }
     public List<StatusHistoryEntry> History { get; init; } = [];
     public List<AdminNoteEntry> InternalNotes { get; init; } = [];
 }

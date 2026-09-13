@@ -2,7 +2,12 @@ import { apiFetch } from "./client";
 
 export type ServerPaymentIntent = {
   id: string;
+  bookingId?: string;
   status: string;
+  amount?: number;
+  currency?: string;
+  provider?: string;
+  providerRef?: string | null;
   checkoutUrl?: string | null;
 };
 

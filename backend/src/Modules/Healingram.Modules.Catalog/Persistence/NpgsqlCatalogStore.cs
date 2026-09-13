@@ -369,6 +369,64 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
         return pages.FirstOrDefault(p => p.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
     }
 
+    public async Task<IReadOnlyList<ContentSectionRecord>> ListSectionsAsync(string surface, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT slug, surface, title, body, image_url, cta_label, cta_href, payload::text, sort_order
+            FROM content.sections
+            WHERE surface = $1 AND active = TRUE
+            ORDER BY sort_order, slug
+            """,
+            connection);
+        command.Parameters.AddWithValue(surface);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<ContentSectionRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new ContentSectionRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? "{}" : reader.GetString(7),
+                reader.GetInt32(8)));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<NavigationItemRecord>> ListNavigationAsync(string menuKey, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT menu_key, label, href, sort_order, parent_key
+            FROM content.navigation_items
+            WHERE menu_key = $1 AND active = TRUE
+            ORDER BY sort_order, label
+            """,
+            connection);
+        command.Parameters.AddWithValue(menuKey);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<NavigationItemRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new NavigationItemRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4)));
+        }
+
+        return items;
+    }
+
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
         var connectionString = configuration.GetConnectionString("Postgres")

@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchAdminQueue } from "../../lib/api/availability";
 import { fetchNotifications, type ServerNotification } from "../../lib/api/notifications";
 import { fetchAdminLeads, fetchAdminOverview, type AdminLead } from "../../lib/api/leads";
 import {
   adminAddInternalNote,
   isAgingRequest,
-  listAvailabilityRequests,
   refreshAdminRequests,
   requestAgeLabel,
   type AvailabilityRequest,
@@ -24,6 +22,9 @@ export function AdminDashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [leadError, setLeadError] = useState<string | null>(null);
+  const [notifError, setNotifError] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -32,32 +33,27 @@ export function AdminDashboard() {
       setOverview(null);
     }
     try {
-      await refreshAdminRequests();
-      setRequests(listAvailabilityRequests());
+      setRequests(await refreshAdminRequests());
+      setQueueError(null);
     } catch {
-      try {
-        await fetchAdminQueue();
-      } catch {
-        /* queue unavailable */
-      }
+      setQueueError("Could not load availability requests.");
     }
     try {
       setNotifs(await fetchNotifications());
+      setNotifError(null);
     } catch {
-      setNotifs([]);
+      setNotifError("Could not load notifications.");
     }
     try {
       setLeads(await fetchAdminLeads());
+      setLeadError(null);
     } catch {
-      setLeads([]);
+      setLeadError("Could not load expert leads.");
     }
   };
 
   useEffect(() => {
     void refresh();
-    const onChange = () => void refresh();
-    window.addEventListener("healingram-requests", onChange);
-    return () => window.removeEventListener("healingram-requests", onChange);
   }, []);
 
   const selected = requests.find((r) => r.requestId === selectedId) ?? null;
@@ -84,6 +80,7 @@ export function AdminDashboard() {
 
       <section id="expert-leads" className="bg-white rounded-xl border p-6">
         <h2 className="font-semibold mb-4">Expert lead queue</h2>
+        {leadError ? <p className="text-sm text-red-700 mb-3">{leadError}</p> : null}
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
@@ -98,7 +95,7 @@ export function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {leads.length === 0 && (
+              {!leadError && leads.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-6 text-gray-400">
                     No expert leads from the server.
@@ -142,7 +139,14 @@ export function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {requests.length === 0 && (
+              {queueError && (
+                <tr>
+                  <td colSpan={9} className="py-6 text-red-700">
+                    {queueError}
+                  </td>
+                </tr>
+              )}
+              {!queueError && requests.length === 0 && (
                 <tr>
                   <td colSpan={9} className="py-6 text-gray-400">
                     No availability requests from the server.
@@ -187,7 +191,10 @@ export function AdminDashboard() {
             </Link>
           </div>
           <p className="text-sm text-gray-600">
-            Snapshot: {selected.priceSnapshot.label} · {selected.priceSnapshot.priceStatus}
+            Snapshot:{" "}
+            {selected.priceSnapshot
+              ? `${selected.priceSnapshot.label} · ${selected.priceSnapshot.priceStatus}`
+              : "Price snapshot was not returned by the server."}
           </p>
           {isDemoMode() ? (
             <button
@@ -241,8 +248,9 @@ export function AdminDashboard() {
 
       <section className="bg-white rounded-xl border p-6">
         <h2 className="font-semibold mb-3">Notifications</h2>
+        {notifError ? <p className="text-sm text-red-700 mb-3">{notifError}</p> : null}
         <ul className="text-sm space-y-2">
-          {notifs.length === 0 && <li className="text-gray-400">No notifications from the server.</li>}
+          {!notifError && notifs.length === 0 && <li className="text-gray-400">No notifications from the server.</li>}
           {notifs.map((n) => (
             <li key={n.id} className="border-b border-gray-100 py-2">
               <p className="font-medium">{n.title}</p>

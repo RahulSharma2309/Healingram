@@ -1,8 +1,61 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { vendorPortalHref } from "../lib/runtimeConfig";
+import { fetchNavigation, type NavigationItem } from "../lib/api/catalog";
 import healingramMark from "../assets/healingram-mark.png";
 
+function NavColumn({
+  title,
+  items,
+  error,
+}: {
+  title: string;
+  items: NavigationItem[];
+  error: boolean;
+}) {
+  return (
+    <div className="lg:col-span-2">
+      <p className="font-semibold text-white mb-3">{title}</p>
+      {error ? (
+        <p className="text-sm text-sage-100/80">Links could not be loaded.</p>
+      ) : (
+        <ul className="space-y-2 text-sm">
+          {items.map((item) =>
+            item.href.startsWith("http") ? (
+              <li key={`${item.menuKey}-${item.href}`}>
+                <a href={item.href} className="hover:text-white transition-colors">
+                  {item.label}
+                </a>
+              </li>
+            ) : (
+              <li key={`${item.menuKey}-${item.href}`}>
+                <Link to={item.href} className="hover:text-white transition-colors">
+                  {item.label}
+                </Link>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function CustomerFooter() {
+  const [explore, setExplore] = useState<NavigationItem[]>([]);
+  const [legal, setLegal] = useState<NavigationItem[]>([]);
+  const [navError, setNavError] = useState(false);
+
+  useEffect(() => {
+    Promise.all([fetchNavigation("customer.explore"), fetchNavigation("customer.legal")])
+      .then(([exploreItems, legalItems]) => {
+        setExplore(exploreItems);
+        setLegal(legalItems);
+        setNavError(false);
+      })
+      .catch(() => setNavError(true));
+  }, []);
+
   return (
     <footer className="bg-sage-800 text-sage-100 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-12 md:py-14">
@@ -22,61 +75,11 @@ export function CustomerFooter() {
               <span className="font-display text-xl font-bold tracking-tight">Healingram</span>
             </Link>
             <p className="mt-3 text-sm text-sage-100/90 leading-relaxed max-w-sm">
-              Curated wellness retreats, clear programmes and help finding the right stay.
+              Programme-led retreat marketplace.
             </p>
           </div>
 
-          <div className="lg:col-span-2">
-            <p className="font-semibold text-white mb-3">Explore</p>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/retreats" className="hover:text-white transition-colors">
-                  Explore Retreats
-                </Link>
-              </li>
-              <li>
-                <Link to="/retreats" className="hover:text-white transition-colors">
-                  Retreat Types
-                </Link>
-              </li>
-              <li>
-                <Link to="/#explore-by-destination" className="hover:text-white transition-colors">
-                  Destinations
-                </Link>
-              </li>
-              <li>
-                <Link to="/questionnaire" className="hover:text-white transition-colors">
-                  Find My Match
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          <div className="lg:col-span-2">
-            <p className="font-semibold text-white mb-3">Healingram</p>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/about" className="hover:text-white transition-colors">
-                  About
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="hover:text-white transition-colors">
-                  Talk to an Expert
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="hover:text-white transition-colors">
-                  Contact
-                </Link>
-              </li>
-              <li>
-                <Link to="/blog" className="hover:text-white transition-colors">
-                  Blog
-                </Link>
-              </li>
-            </ul>
-          </div>
+          <NavColumn title="Explore" items={explore} error={navError} />
 
           <div className="lg:col-span-2">
             <p className="font-semibold text-white mb-3">For retreat partners</p>
@@ -89,26 +92,12 @@ export function CustomerFooter() {
             </ul>
           </div>
 
-          <div className="lg:col-span-2">
-            <p className="font-semibold text-white mb-3">Legal</p>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <Link to="/terms" className="hover:text-white transition-colors">
-                  Terms
-                </Link>
-              </li>
-              <li>
-                <Link to="/privacy" className="hover:text-white transition-colors">
-                  Privacy
-                </Link>
-              </li>
-            </ul>
-          </div>
+          <NavColumn title="Legal" items={legal} error={navError} />
         </div>
       </div>
 
       <div className="border-t border-sage-700 text-center py-4 text-xs text-sage-100/70">
-        © 2026 Healingram
+        Healingram
       </div>
     </footer>
   );

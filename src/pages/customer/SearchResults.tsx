@@ -4,33 +4,24 @@ import { X } from "lucide-react";
 import { LaunchRetreatCard } from "../../components/LaunchRetreatCard";
 import { ResultsFilterBar } from "../../components/ResultsFilterBar";
 import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
-import { filterBrowseRetreats } from "../../lib/browse";
-import { titleFromSlug } from "../../lib/catalogTypes";
 
 export function SearchResults() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { retreats: inventory, needs, needThemeMap, source } = usePublishedRetreats();
-
   const needId = params.get("need");
   const locationParam = params.get("location") || "";
+  const { retreats: inventory, needs, source } = usePublishedRetreats({
+    need: needId ?? undefined,
+    locality: locationParam || undefined,
+    state: locationParam || undefined,
+  });
   const checkIn = params.get("checkIn") || "";
   const checkOut = params.get("checkOut") || "";
 
-  const needLabel =
-    needs.find((need) => need.slug === needId)?.label ??
-    (needId ? titleFromSlug(needId) : undefined);
+  const needLabel = needs.find((need) => need.slug === needId)?.label;
 
-  const needMatches = useMemo(
-    () =>
-      filterBrowseRetreats(
-        { needs: needId ? [needId] : [] },
-        inventory,
-        needThemeMap,
-      ),
-    [needId, inventory, needThemeMap],
-  );
+  const needMatches = inventory;
 
   const locationGroups = useMemo(() => {
     const regions = new Map<string, { region: string; regionLabel: string; localities: string[] }>();
@@ -71,18 +62,7 @@ export function SearchResults() {
     }
   }, [locationParam, locationValid, params, setParams]);
 
-  const results = useMemo(
-    () =>
-      filterBrowseRetreats(
-        {
-          needs: needId ? [needId] : [],
-          locations: location ? [location] : [],
-        },
-        inventory,
-        needThemeMap,
-      ),
-    [needId, location, inventory, needThemeMap],
-  );
+  const results = inventory;
 
   const updateParams = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);

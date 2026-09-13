@@ -8,6 +8,8 @@ public interface IBookingPaymentPort
 {
     Task<BookingPaymentGate?> FindByPublicIdAsync(string publicId, CancellationToken cancellationToken);
 
+    Task<BookingPaymentGate?> FindByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken);
+
     Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken);
 }
 

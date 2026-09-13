@@ -15,6 +15,32 @@ internal sealed class FakeCatalogReadPort(params string[] slugs) : ICatalogReadP
     public Task<IReadOnlyList<PublishedRetreatMatchCard>> GetPublishedRetreatsForMatchAsync(
         CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlyList<PublishedRetreatMatchCard>>([]);
+
+    public Task<CatalogStayLabels?> GetStayLabelsAsync(
+        string retreatSlug,
+        string programmeSlug,
+        CancellationToken cancellationToken)
+    {
+        if (!slugs.Any(slug => slug.Equals(retreatSlug, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Task.FromResult<CatalogStayLabels?>(null);
+        }
+
+        var retreatId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var programmeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        return Task.FromResult<CatalogStayLabels?>(new CatalogStayLabels(
+            retreatId,
+            retreatSlug,
+            Title(retreatSlug),
+            programmeId,
+            programmeSlug,
+            Title(programmeSlug),
+            null));
+    }
+
+    private static string Title(string slug)
+        => string.Join(' ', slug.Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part[1..]));
 }
 
 internal sealed class RecordingBookingCommands : IBookingCommands
@@ -35,6 +61,21 @@ internal sealed class RecordingBookingCommands : IBookingCommands
 
         return Task.FromResult(new BookingRef(Guid.NewGuid(), "BK-2026-10001", BookingStatuses.AwaitingPayment));
     }
+
+    public Task<BookingLifecycleResult> CancelAsync(
+        BookingLifecycleCommand command,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new BookingLifecycleResult(true, null));
+
+    public Task<BookingLifecycleResult> RequestRefundAsync(
+        BookingLifecycleCommand command,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new BookingLifecycleResult(true, null));
+
+    public Task<BookingLifecycleResult> MarkRefundedAsync(
+        BookingLifecycleCommand command,
+        CancellationToken cancellationToken)
+        => Task.FromResult(new BookingLifecycleResult(true, null));
 }
 
 internal sealed class FakePartnerAccess : IPartnerAccess
@@ -69,6 +110,13 @@ internal sealed class FakePartnerAccess : IPartnerAccess
             new PartnerMembership(userId, "Test Partner", "manager", "active")
         ]);
     }
+
+    public async Task<bool> CanAccessPartnerAsync(Guid userId, Guid partnerId, CancellationToken cancellationToken)
+    {
+        var memberships = await ListMembershipsForUserAsync(userId, cancellationToken);
+        return memberships.Any(m => m.PartnerId == partnerId
+            && string.Equals(m.Status, "active", StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 internal sealed class FakeGuestIdentityPort(Guid customerId) : IGuestIdentityPort
@@ -99,6 +147,9 @@ internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
         return Task.FromResult<BookingPaymentGate?>(
             new BookingPaymentGate(Guid.NewGuid(), "BK-PAID", BookingStatuses.Paid, null, publicId));
     }
+
+    public Task<BookingPaymentGate?> FindByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken)
+        => Task.FromResult<BookingPaymentGate?>(null);
 
     public Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
         => throw new NotSupportedException();

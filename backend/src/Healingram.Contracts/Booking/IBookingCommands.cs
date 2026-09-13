@@ -7,6 +7,12 @@ namespace Healingram.Contracts.Booking;
 public interface IBookingCommands
 {
     Task<BookingRef> CreateAwaitingPaymentAsync(CreateAwaitingPaymentBooking command, CancellationToken cancellationToken);
+
+    Task<BookingLifecycleResult> CancelAsync(BookingLifecycleCommand command, CancellationToken cancellationToken);
+
+    Task<BookingLifecycleResult> RequestRefundAsync(BookingLifecycleCommand command, CancellationToken cancellationToken);
+
+    Task<BookingLifecycleResult> MarkRefundedAsync(BookingLifecycleCommand command, CancellationToken cancellationToken);
 }
 
 public sealed record CreateAwaitingPaymentBooking(
@@ -17,6 +23,10 @@ public sealed record CreateAwaitingPaymentBooking(
     Guid? CustomerUserId = null);
 
 public sealed record BookingRef(Guid Id, string BookingNumber, string Status);
+
+public sealed record BookingLifecycleCommand(Guid RequestId, string Reason);
+
+public sealed record BookingLifecycleResult(bool Applied, BookingRef? Booking, string? Error = null);
 
 public static class BookingStatuses
 {

@@ -93,6 +93,15 @@ internal static class NeedCatalog
             return [];
         }
 
+        if (need.Contains(',', StringComparison.Ordinal))
+        {
+            return need
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .SelectMany(part => ExpandNeedFilter(part))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
         if (need.Equals("yoga-meditation", StringComparison.OrdinalIgnoreCase)
             || need.Equals("yoga_meditation", StringComparison.OrdinalIgnoreCase))
         {
@@ -234,11 +243,38 @@ internal static class DurationFilter
             return true;
         }
 
+        if (duration.Contains(',', StringComparison.Ordinal))
+        {
+            return duration
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(part => Matches(programme, part));
+        }
+
         var raw = duration.Trim();
         if (raw.Equals("weekend", StringComparison.OrdinalIgnoreCase))
         {
             return programme.SupportedDurations.Any(n => n is 2 or 3)
                 || programme.ThemeSlug.Equals("weekend", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (raw.Equals("4-5", StringComparison.OrdinalIgnoreCase))
+        {
+            return programme.SupportedDurations.Any(n => n is >= 4 and <= 5);
+        }
+
+        if (raw.Equals("6-8", StringComparison.OrdinalIgnoreCase))
+        {
+            return programme.SupportedDurations.Any(n => n is >= 6 and <= 8);
+        }
+
+        if (raw.Equals("10-14", StringComparison.OrdinalIgnoreCase))
+        {
+            return programme.SupportedDurations.Any(n => n is >= 10 and <= 14);
+        }
+
+        if (raw.Equals("21", StringComparison.OrdinalIgnoreCase) || raw.Equals("21+", StringComparison.OrdinalIgnoreCase))
+        {
+            return programme.SupportedDurations.Any(n => n >= 21);
         }
 
         var digits = new string(raw.TakeWhile(char.IsDigit).ToArray());

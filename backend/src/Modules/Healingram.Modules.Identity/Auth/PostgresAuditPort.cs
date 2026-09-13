@@ -44,4 +44,45 @@ internal sealed class PostgresAuditPort(IConfiguration configuration) : IAuditPo
             },
             cancellationToken);
     }
+
+    public async Task<IReadOnlyList<AuditRecord>> ListAsync(int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safeSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+        var offset = (safePage - 1) * safeSize;
+        var connectionString = configuration.GetConnectionString("Postgres");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return [];
+        }
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT id, action, entity_type, entity_id, actor_id, actor_role, correlation_id, occurred_at
+            FROM audit.events
+            ORDER BY occurred_at DESC
+            LIMIT $1 OFFSET $2
+            """,
+            connection);
+        command.Parameters.AddWithValue(safeSize);
+        command.Parameters.AddWithValue(offset);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<AuditRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new AuditRecord(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetGuid(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.GetFieldValue<DateTimeOffset>(7)));
+        }
+
+        return items;
+    }
 }

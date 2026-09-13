@@ -157,6 +157,64 @@ internal sealed class PostgresBookingStore(IConfiguration configuration) : IBook
         return true;
     }
 
+    public async Task<bool> TryTransitionStatusAsync(
+        Guid bookingId,
+        string fromStatus,
+        string toStatus,
+        string eventType,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+
+        int updated;
+        await using (var update = new NpgsqlCommand(
+            """
+            UPDATE booking.bookings
+            SET status = @status
+            WHERE id = @id
+              AND status = @fromStatus
+            """,
+            connection,
+            tx))
+        {
+            update.Parameters.AddWithValue("status", toStatus);
+            update.Parameters.AddWithValue("fromStatus", fromStatus);
+            update.Parameters.AddWithValue("id", bookingId);
+            updated = await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (updated == 0)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        await using (var ev = new NpgsqlCommand(
+            """
+            INSERT INTO booking.events (id, booking_id, type, payload, created_at)
+            VALUES (@id, @bookingId, @type, @payload, @createdAt)
+            """,
+            connection,
+            tx))
+        {
+            ev.Parameters.AddWithValue("id", Guid.NewGuid());
+            ev.Parameters.AddWithValue("bookingId", bookingId);
+            ev.Parameters.AddWithValue("type", eventType);
+            ev.Parameters.Add(new NpgsqlParameter("payload", NpgsqlDbType.Jsonb)
+            {
+                Value = $$"""{"status":"{{toStatus}}"}"""
+            });
+            ev.Parameters.AddWithValue("createdAt", occurredAt);
+            await ev.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await tx.CommitAsync(cancellationToken);
+        return true;
+    }
+
     private async Task<BookingEntity?> FindByColumnAsync(string column, Guid value, CancellationToken cancellationToken)
     {
         await using var connection = CreateConnection();

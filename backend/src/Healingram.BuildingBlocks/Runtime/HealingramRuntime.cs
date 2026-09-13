@@ -13,6 +13,7 @@ public sealed class HealingramRuntime
     public required bool DemoMode { get; init; }
     public required string OtpProvider { get; init; }
     public required string PaymentProvider { get; init; }
+    public required string InventoryProvider { get; init; }
     public required string CustomerAppUrl { get; init; }
     public required string VendorAppUrl { get; init; }
     public required string AdminAppUrl { get; init; }
@@ -41,6 +42,7 @@ public sealed class HealingramRuntime
             DemoMode = configuration.GetValue("DemoMode", environment.IsDevelopment()),
             OtpProvider = configuration["Otp:Provider"] ?? "local",
             PaymentProvider = configuration["Payment:Provider"] ?? "local",
+            InventoryProvider = configuration["Inventory:Provider"] ?? "local",
             CustomerAppUrl = customer.TrimEnd('/'),
             VendorAppUrl = vendor.TrimEnd('/'),
             AdminAppUrl = admin.TrimEnd('/'),
@@ -82,6 +84,7 @@ public sealed class HealingramRuntime
 
             var otp = (configuration["Otp:Provider"] ?? "local").Trim().ToLowerInvariant();
             var payment = (configuration["Payment:Provider"] ?? "local").Trim().ToLowerInvariant();
+            var inventory = (configuration["Inventory:Provider"] ?? "local").Trim().ToLowerInvariant();
             if (otp is "local"
                 && !configuration.GetValue("Otp:AllowLocalInProduction", false))
             {
@@ -94,6 +97,12 @@ public sealed class HealingramRuntime
                 failures.Add("Payment:Provider cannot be local in Production");
             }
 
+            if (inventory is "local"
+                && !configuration.GetValue("Inventory:AllowLocalInProduction", false))
+            {
+                failures.Add("Inventory:Provider cannot be local in Production");
+            }
+
             if (otp is not "local")
             {
                 failures.Add($"Otp:Provider '{otp}' is not implemented in this build");
@@ -102,6 +111,11 @@ public sealed class HealingramRuntime
             if (payment is not ("local" or "fake"))
             {
                 failures.Add($"Payment:Provider '{payment}' is not implemented in this build");
+            }
+
+            if (inventory is not "local")
+            {
+                failures.Add($"Inventory:Provider '{inventory}' is not implemented in this build");
             }
 
             if (configuration.GetValue("Payment:AllowLocalSimulate", false))

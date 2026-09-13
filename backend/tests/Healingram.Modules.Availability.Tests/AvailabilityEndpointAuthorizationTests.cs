@@ -21,6 +21,14 @@ public class AvailabilityEndpointAuthorizationTests
     }
 
     [Fact]
+    public void Customer_get_by_public_id_requires_authorization()
+    {
+        var get = MappedEndpoints()
+            .Single(e => e.RoutePattern.RawText == "/api/availability/requests/{publicId}");
+        Assert.Contains(get.Metadata.GetOrderedMetadata<IAuthorizeData>(), a => a.Policy is null);
+    }
+
+    [Fact]
     public void Admin_note_requires_requests_manage()
     {
         var post = MappedEndpoints()

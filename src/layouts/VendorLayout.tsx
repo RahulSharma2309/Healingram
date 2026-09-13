@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { BarChart3, Calendar, Home, IndianRupee, LayoutDashboard, Users } from "lucide-react";
+import { fetchPartnerMe } from "../lib/api/partner";
 
 const nav = [
   { to: "/vendor", label: "Dashboard", icon: LayoutDashboard, end: true },
@@ -11,6 +13,18 @@ const nav = [
 ];
 
 export function VendorLayout() {
+  const [partnerName, setPartnerName] = useState<string | null>(null);
+  const [partnerError, setPartnerError] = useState(false);
+
+  useEffect(() => {
+    fetchPartnerMe()
+      .then((me) => {
+        setPartnerName(me.memberships[0]?.partnerName ?? "Vendor");
+        setPartnerError(false);
+      })
+      .catch(() => setPartnerError(true));
+  }, []);
+
   return (
     <div className="min-h-screen flex bg-sand-50">
       <aside className="w-56 bg-sage-800 text-white shrink-0 hidden md:flex flex-col">
@@ -38,7 +52,9 @@ export function VendorLayout() {
       </aside>
       <div className="flex-1 flex flex-col min-w-0">
         <header className="bg-white border-b border-sand-200 px-4 py-3 flex justify-between items-center">
-          <p className="font-medium text-sage-800">Ganga Wellness Ashram</p>
+          <p className="font-medium text-sage-800">
+            {partnerError ? "Could not load partner" : partnerName ?? "Vendor"}
+          </p>
           <span className="text-xs px-2 py-1 bg-teal-100 text-teal-700 rounded">Vendor MVP</span>
         </header>
         <main className="flex-1 p-4 md:p-6 overflow-auto">

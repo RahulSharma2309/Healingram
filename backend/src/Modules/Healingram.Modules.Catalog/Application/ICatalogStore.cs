@@ -19,6 +19,8 @@ internal interface ICatalogStore
     Task<CatalogQuoteRecord?> GetQuoteAsync(Guid id, CancellationToken cancellationToken);
     Task<IReadOnlyList<ContentPageRecord>> ListPublishedContentAsync(string? kind, CancellationToken cancellationToken);
     Task<ContentPageRecord?> GetPublishedContentAsync(string slug, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ContentSectionRecord>> ListSectionsAsync(string surface, CancellationToken cancellationToken);
+    Task<IReadOnlyList<NavigationItemRecord>> ListNavigationAsync(string menuKey, CancellationToken cancellationToken);
 }
 
 internal sealed record NeedRecord(
@@ -66,6 +68,24 @@ internal sealed record CatalogQuoteRecord(
     string PriceStatus,
     string PricingVersion,
     string SnapshotJson);
+
+internal sealed record ContentSectionRecord(
+    string Slug,
+    string Surface,
+    string? Title,
+    string? Body,
+    string? ImageUrl,
+    string? CtaLabel,
+    string? CtaHref,
+    string PayloadJson,
+    int SortOrder);
+
+internal sealed record NavigationItemRecord(
+    string MenuKey,
+    string Label,
+    string Href,
+    int SortOrder,
+    string? ParentKey);
 
 internal sealed record ContentPageRecord(
     string Slug,

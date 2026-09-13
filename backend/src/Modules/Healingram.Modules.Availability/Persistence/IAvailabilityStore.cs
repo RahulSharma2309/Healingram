@@ -20,4 +20,6 @@ internal interface IAvailabilityStore
         IReadOnlyList<string>? retreatSlugs = null);
     Task<IReadOnlyList<AvailabilityRequestEntity>> ListByCustomerUserIdAsync(Guid customerUserId, CancellationToken cancellationToken);
     Task MarkPartnerViewedAsync(IReadOnlyList<Guid> ids, DateTimeOffset viewedAt, CancellationToken cancellationToken);
+
+    Task AttachBookingAsync(Guid requestId, string bookingNumber, CancellationToken cancellationToken);
 }

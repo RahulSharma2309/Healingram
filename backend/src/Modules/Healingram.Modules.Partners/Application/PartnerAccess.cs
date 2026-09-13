@@ -29,4 +29,12 @@ internal sealed class PartnerAccess(IPartnerStore store) : IPartnerAccess, IPart
         Guid userId,
         CancellationToken cancellationToken)
         => store.ListMembershipsForUserAsync(userId, cancellationToken);
+
+    public async Task<bool> CanAccessPartnerAsync(Guid userId, Guid partnerId, CancellationToken cancellationToken)
+    {
+        var memberships = await store.ListMembershipsForUserAsync(userId, cancellationToken);
+        return memberships.Any(m =>
+            m.PartnerId == partnerId
+            && string.Equals(m.Status, "active", StringComparison.OrdinalIgnoreCase));
+    }
 }

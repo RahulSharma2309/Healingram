@@ -72,5 +72,8 @@ public class PartnerWritePolicyTests
         public Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(Guid userId, CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<PartnerMembership>>(
                 [new PartnerMembership(Guid.NewGuid(), "Local Partner", "manager", "active")]);
+
+        public Task<bool> CanAccessPartnerAsync(Guid userId, Guid partnerId, CancellationToken cancellationToken)
+            => Task.FromResult(true);
     }
 }

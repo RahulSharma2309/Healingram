@@ -80,6 +80,34 @@ public class AdminPermissionPolicyTests
     }
 
     [Fact]
+    public async Task Users_and_audit_read_are_independent_admin_permissions()
+    {
+        var store = new InMemoryIdentityStore();
+        var hasher = new AspNetIdentityPasswordHasher();
+        var users = await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "users-admin@local.test", "Users", Roles.Admin, "active"),
+            hasher.Hash("Local123!"),
+            CancellationToken.None);
+        var audit = await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "audit-admin@local.test", "Audit", Roles.Admin, "active"),
+            hasher.Hash("Local123!"),
+            CancellationToken.None);
+        store.ReplaceAdminPermissions(users.Id, AdminPermissions.UsersRead);
+        store.ReplaceAdminPermissions(audit.Id, AdminPermissions.AuditRead);
+
+        var authorization = BuildAuthorization(store);
+        var usersOk = await authorization.AuthorizeAsync(Principal(users.Id, Roles.Admin), IdentityPolicies.AdminUsersRead);
+        var usersDeniedAudit = await authorization.AuthorizeAsync(Principal(users.Id, Roles.Admin), IdentityPolicies.AdminAuditRead);
+        var auditOk = await authorization.AuthorizeAsync(Principal(audit.Id, Roles.Admin), IdentityPolicies.AdminAuditRead);
+        var leadsViaUsers = await authorization.AuthorizeAsync(Principal(users.Id, Roles.Admin), IdentityPolicies.AdminLeadsRead);
+
+        Assert.True(usersOk.Succeeded);
+        Assert.False(usersDeniedAudit.Succeeded);
+        Assert.True(auditOk.Succeeded);
+        Assert.True(leadsViaUsers.Succeeded);
+    }
+
+    [Fact]
     public async Task Partner_write_requires_an_active_membership()
     {
         var store = new InMemoryIdentityStore();
@@ -139,5 +167,8 @@ public class AdminPermissionPolicyTests
             => Task.FromResult<IReadOnlyList<PartnerMembership>>(HasMembership
                 ? [new PartnerMembership(Guid.NewGuid(), "Local Partner", "manager", "active")]
                 : []);
+
+        public Task<bool> CanAccessPartnerAsync(Guid userId, Guid partnerId, CancellationToken cancellationToken)
+            => Task.FromResult(HasMembership);
     }
 }

@@ -107,6 +107,35 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
         return published.Select(r => r.Slug).ToArray();
     }
 
+    public async Task<CatalogStayLabels?> GetStayLabelsAsync(
+        string retreatSlug,
+        string programmeSlug,
+        CancellationToken cancellationToken)
+    {
+        var retreat = await store.GetBySlugAsync(retreatSlug, cancellationToken);
+        if (retreat is null || !retreat.IsPublic)
+        {
+            return null;
+        }
+
+        var programme = retreat.Programmes.FirstOrDefault(p =>
+            p.Slug.Equals(programmeSlug, StringComparison.OrdinalIgnoreCase)
+            && ProgrammeRules.IsValid(p.Slug, p.Name));
+        if (programme is null)
+        {
+            return null;
+        }
+
+        return new CatalogStayLabels(
+            retreat.Id,
+            retreat.Slug,
+            retreat.Name,
+            programme.Id,
+            programme.Slug,
+            programme.Name,
+            null);
+    }
+
     private async Task<IReadOnlyList<RetreatSnapshot>> ListPublishedAsync(CancellationToken cancellationToken)
     {
         var all = await store.ListRetreatsAsync(cancellationToken);
@@ -118,20 +147,24 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
         RetreatSearchQuery query,
         IReadOnlyList<string> needSlugs)
     {
-        if (!string.IsNullOrWhiteSpace(query.State)
-            && !retreat.StateSlug.Equals(query.State.Trim(), StringComparison.OrdinalIgnoreCase))
+        var states = SplitCsv(query.State);
+        if (states.Count > 0
+            && !states.Any(state => retreat.StateSlug.Equals(state, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Locality))
+        var localities = SplitCsv(query.Locality);
+        if (localities.Count > 0)
         {
-            var locality = query.Locality.Trim();
-            var localitySlug = PlaceNaming.Slugify(locality);
-            var matches = retreat.Locality.Equals(locality, StringComparison.OrdinalIgnoreCase)
-                || retreat.LocalitySlug.Equals(locality, StringComparison.OrdinalIgnoreCase)
-                || retreat.LocalitySlug.Equals(localitySlug, StringComparison.OrdinalIgnoreCase);
-            if (!matches)
+            var matchesLocality = localities.Any(locality =>
+            {
+                var localitySlug = PlaceNaming.Slugify(locality);
+                return retreat.Locality.Equals(locality, StringComparison.OrdinalIgnoreCase)
+                    || retreat.LocalitySlug.Equals(locality, StringComparison.OrdinalIgnoreCase)
+                    || retreat.LocalitySlug.Equals(localitySlug, StringComparison.OrdinalIgnoreCase);
+            });
+            if (!matchesLocality)
             {
                 return false;
             }
@@ -142,6 +175,11 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
             && NeedCatalog.ProgrammeMatchesNeed(p, needSlugs)
             && DurationFilter.Matches(p, query.Duration));
     }
+
+    private static IReadOnlyList<string> SplitCsv(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static RetreatCardDto ToCard(RetreatSnapshot retreat)
     {
@@ -317,6 +355,23 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
     public async Task<IReadOnlyList<ContentPageDto>> ListContentAsync(string? kind, CancellationToken cancellationToken)
         => (await store.ListPublishedContentAsync(kind, cancellationToken))
             .Select(p => new ContentPageDto(p.Slug, p.Title, p.Body, p.Kind, p.SortOrder))
+            .ToArray();
+
+    public async Task<IReadOnlyList<HomepageSectionDto>> GetHomepageAsync(CancellationToken cancellationToken)
+        => (await store.ListSectionsAsync("homepage", cancellationToken))
+            .Select(s => new HomepageSectionDto(
+                s.Slug,
+                s.Title,
+                s.Body,
+                s.ImageUrl,
+                s.CtaLabel,
+                s.CtaHref,
+                s.SortOrder))
+            .ToArray();
+
+    public async Task<IReadOnlyList<NavigationItemDto>> GetNavigationAsync(string menu, CancellationToken cancellationToken)
+        => (await store.ListNavigationAsync(menu, cancellationToken))
+            .Select(i => new NavigationItemDto(i.MenuKey, i.Label, i.Href, i.SortOrder, i.ParentKey))
             .ToArray();
 
     public async Task<ContentPageDto?> GetContentAsync(string slug, CancellationToken cancellationToken)

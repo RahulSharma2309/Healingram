@@ -28,22 +28,36 @@ export function retreatCardToLaunch(card: RetreatCard): LaunchRetreat {
   };
 }
 
-export function usePublishedRetreats() {
+export function usePublishedRetreats(query: {
+  need?: string;
+  state?: string;
+  locality?: string;
+  duration?: string;
+} = {}) {
   const [retreats, setRetreats] = useState<LaunchRetreat[]>([]);
   const [places, setPlaces] = useState<CatalogState[]>([]);
   const [needs, setNeeds] = useState<CatalogNeed[]>([]);
   const [needThemeMap, setNeedThemeMap] = useState<NeedThemeMap>({});
   const [source, setSource] = useState<CatalogLoadSource>("loading");
+  const need = query.need ?? "";
+  const state = query.state ?? "";
+  const locality = query.locality ?? "";
+  const duration = query.duration ?? "";
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const [items, apiPlaces, apiNeeds, questions] = await Promise.all([
-          fetchRetreats({}),
+          fetchRetreats({
+            need: need || undefined,
+            state: state || undefined,
+            locality: locality || undefined,
+            duration: duration || undefined,
+          }),
           fetchPlaces(),
           fetchNeeds(),
-          fetchMatchOptions().catch(() => []),
+          fetchMatchOptions(),
         ]);
         if (cancelled) return;
         setRetreats(items.map(retreatCardToLaunch));
@@ -69,7 +83,7 @@ export function usePublishedRetreats() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [need, state, locality, duration]);
 
   const byId = useMemo(() => new Map(retreats.map((r) => [r.id, r])), [retreats]);
 

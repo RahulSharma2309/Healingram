@@ -58,6 +58,8 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
         stored.PartnerRespondedAt = entity.PartnerRespondedAt;
         stored.FinalAmountInr = entity.FinalAmountInr;
         stored.AlternativeJson = entity.AlternativeJson;
+        stored.InventoryHoldId = entity.InventoryHoldId;
+        stored.BookingNumber = entity.BookingNumber ?? stored.BookingNumber;
         stored.History.Add(history);
         return Task.FromResult(true);
     }
@@ -102,6 +104,13 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
         return Task.CompletedTask;
     }
 
+    public Task AttachBookingAsync(Guid requestId, string bookingNumber, CancellationToken cancellationToken)
+    {
+        var stored = _items.First(i => i.Id == requestId);
+        stored.BookingNumber = bookingNumber;
+        return Task.CompletedTask;
+    }
+
     private static AvailabilityRequestEntity Clone(AvailabilityRequestEntity entity)
         => new()
         {
@@ -123,6 +132,8 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
             PartnerRespondedAt = entity.PartnerRespondedAt,
             FinalAmountInr = entity.FinalAmountInr,
             AlternativeJson = entity.AlternativeJson,
+            InventoryHoldId = entity.InventoryHoldId,
+            BookingNumber = entity.BookingNumber,
             History = [.. entity.History],
             InternalNotes = [.. entity.InternalNotes]
         };

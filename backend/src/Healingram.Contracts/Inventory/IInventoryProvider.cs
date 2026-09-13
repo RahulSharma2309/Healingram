@@ -17,6 +17,22 @@ public interface IInventoryProvider
     Task ReleaseHoldAsync(Guid holdId, CancellationToken cancellationToken);
 
     Task ConfirmReservationAsync(Guid holdId, CancellationToken cancellationToken);
+
+    Task ReleaseByRequestPublicIdAsync(string requestPublicId, CancellationToken cancellationToken);
+
+    Task ConfirmByRequestPublicIdAsync(string requestPublicId, CancellationToken cancellationToken);
+}
+
+public static class InventoryProviders
+{
+    public const string Local = "local";
+    public const string External = "external";
+
+    public static string Normalize(string? configured)
+        => string.IsNullOrWhiteSpace(configured) ? Local : configured.Trim().ToLowerInvariant();
+
+    public static bool IsImplemented(string? configured)
+        => Normalize(configured) is Local;
 }
 
 public sealed record InventoryCheckRequest(

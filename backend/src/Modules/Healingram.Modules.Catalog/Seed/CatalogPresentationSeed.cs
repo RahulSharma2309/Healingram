@@ -13,6 +13,7 @@ internal static class CatalogPresentationSeed
         await UpsertDestinationsAsync(connection, tx, cancellationToken);
         await UpsertMatchingAsync(connection, tx, cancellationToken);
         await UpsertContentAsync(connection, tx, cancellationToken);
+        await UpsertHomepageAndNavigationAsync(connection, tx, cancellationToken);
         await UpsertLeadOptionsAsync(connection, tx, cancellationToken);
         await UpsertSettingsAsync(connection, tx, cancellationToken);
         await UpsertListingExtrasAsync(connection, tx, cancellationToken);
@@ -325,6 +326,114 @@ internal static class CatalogPresentationSeed
             command.Parameters.AddWithValue(page.Order);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
+    }
+
+    private static async Task UpsertHomepageAndNavigationAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction tx,
+        CancellationToken cancellationToken)
+    {
+        var sections = new (string Slug, string Title, string Body, string? Image, string? Cta, string? Href, int Order)[]
+        {
+            ("hero", "Find the right retreat for what you’re going through.", "Find retreats, practices and people that help you return to yourself.", "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1800&q=80", null, null, 1),
+            ("needs", "Explore by what you need", "Start with what you’re looking for. We’ll show you retreats that fit.", null, null, null, 2),
+            ("destinations", "Explore by destination", "Destinations come from published inventory — including Karnataka, Kerala, and the extra local-demo states.", null, null, null, 3),
+            ("expert", "Still not sure which retreat is right for you?", "Tell us what you’re looking for and a Healingram expert can help you narrow down the options.", "https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=1600&q=80", "Talk to an Expert", "/contact", 4)
+        };
+
+        foreach (var section in sections)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO content.sections (slug, surface, title, body, image_url, cta_label, cta_href, payload, sort_order, active)
+                VALUES ($1, 'homepage', $2, $3, $4, $5, $6, '{}'::jsonb, $7, TRUE)
+                ON CONFLICT (slug) DO UPDATE SET
+                    surface = 'homepage',
+                    title = EXCLUDED.title,
+                    body = EXCLUDED.body,
+                    image_url = EXCLUDED.image_url,
+                    cta_label = EXCLUDED.cta_label,
+                    cta_href = EXCLUDED.cta_href,
+                    sort_order = EXCLUDED.sort_order,
+                    active = TRUE
+                """,
+                connection,
+                tx);
+            command.Parameters.AddWithValue(section.Slug);
+            command.Parameters.AddWithValue(section.Title);
+            command.Parameters.AddWithValue(section.Body);
+            command.Parameters.Add(Typed(section.Image));
+            command.Parameters.Add(Typed(section.Cta));
+            command.Parameters.Add(Typed(section.Href));
+            command.Parameters.AddWithValue(section.Order);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var menus = new (string Key, string Label)[]
+        {
+            ("customer.explore", "Explore"),
+            ("customer.legal", "Legal"),
+            ("customer.account", "Account"),
+            ("customer.header", "Header")
+        };
+        foreach (var menu in menus)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO content.navigation_menus (menu_key, label)
+                VALUES ($1, $2)
+                ON CONFLICT (menu_key) DO UPDATE SET label = EXCLUDED.label
+                """,
+                connection,
+                tx);
+            command.Parameters.AddWithValue(menu.Key);
+            command.Parameters.AddWithValue(menu.Label);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var items = new (string Menu, string Label, string Href, int Order)[]
+        {
+            ("customer.explore", "Find a retreat", "/retreats", 1),
+            ("customer.explore", "Find my match", "/find-my-match", 2),
+            ("customer.explore", "Talk to an expert", "/contact", 3),
+            ("customer.legal", "About", "/about", 1),
+            ("customer.legal", "Terms", "/terms", 2),
+            ("customer.legal", "Privacy", "/privacy", 3),
+            ("customer.account", "My requests", "/account/requests", 1),
+            ("customer.account", "Vendor access", "/vendor", 2),
+            ("customer.account", "Admin access", "/admin", 3),
+            ("customer.header", "Explore Retreats", "/retreats", 1),
+            ("customer.header", "Find My Match", "/questionnaire", 2),
+            ("customer.header", "Talk to an Expert", "/contact", 3)
+        };
+        foreach (var item in items)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO content.navigation_items (id, menu_key, label, href, sort_order, active)
+                VALUES ($1, $2, $3, $4, $5, TRUE)
+                ON CONFLICT (id) DO UPDATE SET
+                    label = EXCLUDED.label,
+                    href = EXCLUDED.href,
+                    sort_order = EXCLUDED.sort_order,
+                    active = TRUE
+                """,
+                connection,
+                tx);
+            command.Parameters.AddWithValue(StableId(item.Menu, item.Href));
+            command.Parameters.AddWithValue(item.Menu);
+            command.Parameters.AddWithValue(item.Label);
+            command.Parameters.AddWithValue(item.Href);
+            command.Parameters.AddWithValue(item.Order);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+    }
+
+    private static Guid StableId(string menu, string href)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes($"nav:{menu}:{href}"));
+        return new Guid(bytes.AsSpan(0, 16));
     }
 
     private static async Task UpsertLeadOptionsAsync(

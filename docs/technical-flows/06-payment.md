@@ -9,11 +9,12 @@
   → INSERT payment.intents (status creating, stable idempotency key)
   → IPaymentProvider.CreatePayment (provider-neutral; local today)
   → UPDATE intent ready
-  → later provider webhook (local: admin simulate or `/api/payment/webhooks/local`)
+  → later provider webhook (local: admin simulate, `/api/payment/webhooks/local`, or `/api/payment/webhooks/fake`)
   → webhook event received → process → processed
   → payment.intents = paid
   → booking marked paid (`awaiting_payment` only)
-  → notifications.outbox (same failure path as the webhook)
+  → inventory hold confirmed via `IInventoryProvider`
+  → notifications.outbox (`PaymentPaid`, `BookingConfirmed`)
   → GET /api/trips puts the stay in upcoming
 ```
 
@@ -39,4 +40,4 @@ The return URL and `GET /api/payment/intents/{id}` are **read-only**. Auth and o
 
 ## Production swap
 
-`Payment:Provider` selects the adapter at startup (`local` today). `razorpay` / unknown → process refuses to start. Do not put a webhook secret in `VITE_*`. Never trust the browser.
+`Payment:Provider` and `Inventory:Provider` select adapters at startup (`local` today). Unimplemented or unknown names refuse to start. Do not put a webhook secret in `VITE_*`. Never trust the browser.

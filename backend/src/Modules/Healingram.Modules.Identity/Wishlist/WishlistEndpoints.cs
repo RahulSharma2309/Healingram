@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Auth;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -17,6 +18,11 @@ internal static class WishlistEndpoints
 
         wishlist.MapGet("/", async (ClaimsPrincipal principal, WishlistService service, CancellationToken ct) =>
         {
+            if (IsGuestRequest(principal))
+            {
+                return WishlistHttp.Forbidden();
+            }
+
             if (!AuthEndpoints.TryGetUserId(principal, out var userId))
             {
                 return WishlistHttp.Unauthorized();
@@ -27,6 +33,11 @@ internal static class WishlistEndpoints
 
         wishlist.MapPost("/", async (AddWishlistRequest? body, ClaimsPrincipal principal, WishlistService service, CancellationToken ct) =>
         {
+            if (IsGuestRequest(principal))
+            {
+                return WishlistHttp.Forbidden();
+            }
+
             if (!AuthEndpoints.TryGetUserId(principal, out var userId))
             {
                 return WishlistHttp.Unauthorized();
@@ -37,6 +48,11 @@ internal static class WishlistEndpoints
 
         wishlist.MapDelete("/{slug}", async (string slug, ClaimsPrincipal principal, WishlistService service, CancellationToken ct) =>
         {
+            if (IsGuestRequest(principal))
+            {
+                return WishlistHttp.Forbidden();
+            }
+
             if (!AuthEndpoints.TryGetUserId(principal, out var userId))
             {
                 return WishlistHttp.Unauthorized();
@@ -66,5 +82,17 @@ internal static class WishlistEndpoints
                 new { error = "Unauthorized", details = Array.Empty<string>() },
                 Json,
                 statusCode: StatusCodes.Status401Unauthorized);
+
+        public static IResult Forbidden()
+            => Results.Json(
+                new { error = "Forbidden", details = new[] { "Guest request tokens cannot use wishlist" } },
+                Json,
+                statusCode: StatusCodes.Status403Forbidden);
     }
+
+    private static bool IsGuestRequest(ClaimsPrincipal principal)
+        => string.Equals(
+            RoleAuthorization.GetAuthKind(principal),
+            AuthKinds.GuestRequest,
+            StringComparison.OrdinalIgnoreCase);
 }

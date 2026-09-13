@@ -25,7 +25,8 @@ public sealed class AvailabilityModule : IAppModule
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAvailabilityStore, PostgresAvailabilityStore>();
         services.AddScoped<IRequestAccessLookup, RequestAccessLookup>();
-        services.AddScoped<IInventoryProvider, LocalInventoryProvider>();
+        services.AddScoped<IInventoryProvider>(InventoryProviderFactory.Create);
+        services.AddScoped<InventoryService>();
         services.AddScoped<AvailabilityService>();
     }
 

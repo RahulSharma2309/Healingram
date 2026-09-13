@@ -9,4 +9,9 @@ public interface ICatalogReadPort
 
     Task<IReadOnlyList<PublishedRetreatMatchCard>> GetPublishedRetreatsForMatchAsync(
         CancellationToken cancellationToken);
+
+    Task<CatalogStayLabels?> GetStayLabelsAsync(
+        string retreatSlug,
+        string programmeSlug,
+        CancellationToken cancellationToken);
 }

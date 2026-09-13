@@ -35,7 +35,9 @@ export function ProfileDetails() {
         setAddress(user.address ?? "");
       })
       .catch(() => {
-        /* keep in-memory session values until GET /users/me answers */
+        if (!cancelled) {
+          setError("Could not load your profile from the server.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -1,3 +1,4 @@
+using Healingram.Contracts.Audit;
 using Healingram.Contracts.Identity;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -40,7 +41,7 @@ internal static class AdminOverviewEndpoints
                 leads = await Count("SELECT COUNT(*)::int FROM leads.expert_leads"),
                 notifications = await Count("SELECT COUNT(*)::int FROM notifications.inbox")
             });
-        }).RequireAuthorization(IdentityPolicies.AdminWrite).WithTags("Admin");
+        }).RequireAuthorization(IdentityPolicies.AdminUsersRead).WithTags("Admin");
 
         app.MapGet("/api/admin/leads", async (
             IConfiguration configuration,
@@ -77,6 +78,18 @@ internal static class AdminOverviewEndpoints
             }
 
             return Results.Ok(new { items });
-        }).RequireAuthorization(IdentityPolicies.AdminWrite).WithTags("Admin");
+        }).RequireAuthorization(IdentityPolicies.AdminLeadsRead).WithTags("Admin");
+
+        app.MapGet("/api/admin/audit", async (
+            IAuditPort audit,
+            int? page,
+            int? pageSize,
+            CancellationToken cancellationToken) =>
+        {
+            var safePage = page is null or < 1 ? 1 : page.Value;
+            var safeSize = pageSize is null or < 1 ? 20 : Math.Min(pageSize.Value, 100);
+            var items = await audit.ListAsync(safePage, safeSize, cancellationToken);
+            return Results.Ok(new { items, page = safePage, pageSize = safeSize, total = items.Count });
+        }).RequireAuthorization(IdentityPolicies.AdminAuditRead).WithTags("Admin");
     }
 }

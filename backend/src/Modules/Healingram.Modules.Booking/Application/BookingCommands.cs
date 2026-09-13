@@ -10,7 +10,8 @@ namespace Healingram.Modules.Booking.Application;
 internal sealed class BookingCommands(
     IBookingStore store,
     TimeProvider clock,
-    ILogger<BookingCommands> logger) : IBookingCommands
+    ILogger<BookingCommands> logger,
+    Healingram.BuildingBlocks.Notifications.INotificationOutbox? outbox = null) : IBookingCommands
 {
     public async Task<BookingRef> CreateAwaitingPaymentAsync(
         CreateAwaitingPaymentBooking command,
@@ -52,6 +53,95 @@ internal sealed class BookingCommands(
         activity?.SetTag("booking.number", entity.BookingNumber);
         logger.LogInformation("Booking {BookingNumber} created awaiting payment", entity.BookingNumber);
         return new BookingRef(entity.Id, entity.BookingNumber, entity.Status);
+    }
+
+    public Task<BookingLifecycleResult> CancelAsync(BookingLifecycleCommand command, CancellationToken cancellationToken)
+        => TransitionAsync(
+            command,
+            BookingStatuses.AwaitingPayment,
+            BookingStatuses.Cancelled,
+            "cancelled",
+            Healingram.BuildingBlocks.Notifications.NotificationKinds.BookingCancelled,
+            cancellationToken);
+
+    public Task<BookingLifecycleResult> RequestRefundAsync(BookingLifecycleCommand command, CancellationToken cancellationToken)
+        => TransitionAsync(
+            command,
+            BookingStatuses.Paid,
+            BookingStatuses.RefundPending,
+            "refund_pending",
+            Healingram.BuildingBlocks.Notifications.NotificationKinds.RefundInitiated,
+            cancellationToken);
+
+    public Task<BookingLifecycleResult> MarkRefundedAsync(BookingLifecycleCommand command, CancellationToken cancellationToken)
+        => TransitionAsync(
+            command,
+            BookingStatuses.RefundPending,
+            BookingStatuses.Refunded,
+            "refunded",
+            Healingram.BuildingBlocks.Notifications.NotificationKinds.RefundCompleted,
+            cancellationToken);
+
+    private async Task<BookingLifecycleResult> TransitionAsync(
+        BookingLifecycleCommand command,
+        string fromStatus,
+        string toStatus,
+        string eventType,
+        string notificationKind,
+        CancellationToken cancellationToken)
+    {
+        var entity = await store.FindByRequestIdAsync(command.RequestId, cancellationToken);
+        if (entity is null)
+        {
+            return new BookingLifecycleResult(false, null, "booking not found");
+        }
+
+        if (string.Equals(entity.Status, toStatus, StringComparison.Ordinal))
+        {
+            return new BookingLifecycleResult(true, new BookingRef(entity.Id, entity.BookingNumber, entity.Status));
+        }
+
+        if (!string.Equals(entity.Status, fromStatus, StringComparison.Ordinal))
+        {
+            return new BookingLifecycleResult(
+                false,
+                new BookingRef(entity.Id, entity.BookingNumber, entity.Status),
+                $"Cannot move booking from {entity.Status} to {toStatus}");
+        }
+
+        var applied = await store.TryTransitionStatusAsync(
+            entity.Id,
+            fromStatus,
+            toStatus,
+            eventType,
+            clock.GetUtcNow(),
+            cancellationToken);
+        if (!applied)
+        {
+            var raced = await store.FindByRequestIdAsync(command.RequestId, cancellationToken);
+            if (raced is not null && string.Equals(raced.Status, toStatus, StringComparison.Ordinal))
+            {
+                return new BookingLifecycleResult(true, new BookingRef(raced.Id, raced.BookingNumber, raced.Status));
+            }
+
+            return new BookingLifecycleResult(
+                false,
+                raced is null ? null : new BookingRef(raced.Id, raced.BookingNumber, raced.Status),
+                "This booking was already updated");
+        }
+
+        entity.Status = toStatus;
+        if (outbox is not null)
+        {
+            await outbox.EnqueueAsync(
+                notificationKind,
+                $"{notificationKind}:{entity.BookingNumber}",
+                new { bookingNumber = entity.BookingNumber, reason = command.Reason },
+                cancellationToken);
+        }
+
+        logger.LogInformation("Booking {BookingNumber} transitioned to {Status}", entity.BookingNumber, toStatus);
+        return new BookingLifecycleResult(true, new BookingRef(entity.Id, entity.BookingNumber, entity.Status));
     }
 }
 

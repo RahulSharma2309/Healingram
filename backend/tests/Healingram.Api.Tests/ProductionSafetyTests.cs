@@ -36,6 +36,7 @@ public class ProductionSafetyTests
             ["Payment:Provider"] = "local",
             ["Otp:AllowLocalInProduction"] = "true",
             ["Payment:AllowLocalInProduction"] = "true",
+            ["Inventory:AllowLocalInProduction"] = "true",
             ["Payment:AllowLocalSimulate"] = "true",
             ["DemoMode"] = "false"
         }).Build();
@@ -67,6 +68,7 @@ public class ProductionSafetyTests
             ["Payment:Provider"] = "local",
             ["Otp:AllowLocalInProduction"] = "true",
             ["Payment:AllowLocalInProduction"] = "true",
+            ["Inventory:AllowLocalInProduction"] = "true",
             ["Identity:SeedOnStartup"] = "true",
             ["DemoMode"] = "false"
         }).Build();
@@ -85,6 +87,7 @@ public class ProductionSafetyTests
             ["Payment:WebhookSecret"] = "production-webhook-secret",
             ["Otp:Provider"] = "twilio",
             ["Payment:Provider"] = "razorpay",
+            ["Inventory:Provider"] = "external",
             ["DemoMode"] = "false"
         }).Build();
 

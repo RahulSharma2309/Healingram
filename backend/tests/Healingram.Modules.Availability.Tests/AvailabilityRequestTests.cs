@@ -22,6 +22,24 @@ public class AvailabilityRequestTests
         Assert.Equal(AvailabilityStatuses.Requested, result.Entity.Status);
         Assert.Contains("\"priceStatus\":\"ON_REQUEST\"", result.Entity.SnapshotJson, StringComparison.Ordinal);
         Assert.Contains("\"checkIn\":\"2026-11-02\"", result.Entity.SnapshotJson, StringComparison.Ordinal);
+        Assert.Contains("\"checkOut\":\"2026-11-09\"", result.Entity.SnapshotJson, StringComparison.Ordinal);
+        Assert.Contains("\"retreatName\":\"Published Retreat\"", result.Entity.SnapshotJson, StringComparison.Ordinal);
+        Assert.Contains("\"programmeName\":\"Panchakarma\"", result.Entity.SnapshotJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("+91", result.Entity.SnapshotJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("MARKETPLACE_SPLIT", result.Entity.SnapshotJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Create_rejects_unknown_programme()
+    {
+        var (service, _, _) = AvailabilityHarness.Create();
+
+        var result = await service.CreateAsync(
+            AvailabilityHarness.Request(programme: ""),
+            AvailabilityHarness.Customer,
+            CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Validation, result.Kind);
     }
 
     [Fact]
@@ -146,5 +164,20 @@ public class AvailabilityRequestTests
 
         var adminJson = JsonSerializer.Serialize(AvailabilityEndpoints.ToDto(loaded, includeNotes: true));
         Assert.Contains("internal follow-up", adminJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Customer_can_cancel_a_requested_stay()
+    {
+        var (service, _, _) = AvailabilityHarness.Create();
+        var created = await service.CreateAsync(AvailabilityHarness.Request(), AvailabilityHarness.Customer, CancellationToken.None);
+
+        var cancelled = await service.CancelAsync(
+            created.Entity!.PublicId,
+            AvailabilityHarness.Customer,
+            CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Ok, cancelled.Kind);
+        Assert.Equal(AvailabilityStatuses.Cancelled, cancelled.Entity!.Status);
     }
 }

@@ -55,6 +55,12 @@ internal sealed class LocalInventoryProvider(
     public Task ConfirmReservationAsync(Guid holdId, CancellationToken cancellationToken)
         => UpdateStatusAsync(holdId, "confirmed", cancellationToken);
 
+    public Task ReleaseByRequestPublicIdAsync(string requestPublicId, CancellationToken cancellationToken)
+        => UpdateByRequestAsync(requestPublicId, "released", cancellationToken);
+
+    public Task ConfirmByRequestPublicIdAsync(string requestPublicId, CancellationToken cancellationToken)
+        => UpdateByRequestAsync(requestPublicId, "confirmed", cancellationToken);
+
     private async Task UpdateStatusAsync(Guid holdId, string status, CancellationToken cancellationToken)
     {
         await using var connection = Open();
@@ -63,6 +69,28 @@ internal sealed class LocalInventoryProvider(
             "UPDATE inventory.holds SET status = $2 WHERE id = $1",
             connection);
         command.Parameters.AddWithValue(holdId);
+        command.Parameters.AddWithValue(status);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task UpdateByRequestAsync(string requestPublicId, string status, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(requestPublicId))
+        {
+            return;
+        }
+
+        await using var connection = Open();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE inventory.holds
+            SET status = $2
+            WHERE request_public_id = $1
+              AND status = 'held'
+            """,
+            connection);
+        command.Parameters.AddWithValue(requestPublicId);
         command.Parameters.AddWithValue(status);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

@@ -71,7 +71,11 @@ export async function persistAuthenticatedSession(tokens: TokenResponse): Promis
   persistSession(tokens);
   applyAuthUser(tokens.user);
   if (tokens.user.accountStatus !== "guest") {
-    await hydrateWishlistFromServer();
+    try {
+      await hydrateWishlistFromServer();
+    } catch {
+      /* wishlist is not session-critical */
+    }
   }
   window.dispatchEvent(new Event("healingram-auth"));
 }
@@ -91,7 +95,11 @@ export async function registerAccount(input: {
   });
   persistSession(tokens);
   applyAuthUser(tokens.user);
-  await hydrateWishlistFromServer();
+  try {
+    await hydrateWishlistFromServer();
+  } catch {
+    /* wishlist is not session-critical */
+  }
   return tokens;
 }
 
@@ -126,7 +134,11 @@ export async function verifyGuestRequest(input: {
   persistSession(result);
   applyAuthUser(result.user);
   if (result.user.accountStatus !== "guest") {
-    await hydrateWishlistFromServer();
+    try {
+      await hydrateWishlistFromServer();
+    } catch {
+      /* wishlist is not session-critical */
+    }
   }
   return result;
 }

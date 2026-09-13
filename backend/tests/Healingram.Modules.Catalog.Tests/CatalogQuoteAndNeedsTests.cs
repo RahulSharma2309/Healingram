@@ -147,4 +147,28 @@ public class CatalogQuoteAndNeedsTests
         Assert.Equal("about", page.Slug);
         Assert.Null(await catalog.GetContentAsync("draft-about", CancellationToken.None));
     }
+
+    [Fact]
+    public async Task Homepage_and_navigation_come_from_the_store()
+    {
+        var store = new InMemoryCatalogStore();
+        store.Sections.Add(new ContentSectionRecord(
+            "hero",
+            "homepage",
+            "Find the right retreat for what you’re going through.",
+            "Body",
+            null,
+            null,
+            null,
+            "{}",
+            1));
+        store.Navigation.Add(new NavigationItemRecord("customer.explore", "Find a retreat", "/retreats", 1, null));
+        var catalog = new CatalogQueryService(store);
+
+        var sections = await catalog.GetHomepageAsync(CancellationToken.None);
+        var items = await catalog.GetNavigationAsync("customer.explore", CancellationToken.None);
+
+        Assert.Equal("hero", Assert.Single(sections).Slug);
+        Assert.Equal("/retreats", Assert.Single(items).Href);
+    }
 }

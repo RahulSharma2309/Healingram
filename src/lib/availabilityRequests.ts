@@ -2,6 +2,7 @@ import type { PriceStatus, SettlementMode } from "./pricing";
 import {
   type ServerAvailability,
   acceptAlternativeOnServer,
+  cancelAvailabilityOnServer,
   fetchAdminQueue,
   fetchMyAvailabilityRequests,
   fetchPartnerQueue,
@@ -71,87 +72,192 @@ export type AvailabilityRequest = {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
-  countryCode: string;
+  countryCode: string | null;
   retreatId: string;
-  retreatName: string;
+  retreatName: string | null;
   programmeId: string;
-  programmeName: string;
-  durationNights: number;
+  programmeName: string | null;
+  durationNights: number | null;
   durationUnit: "nights";
-  checkIn: string;
-  checkOut: string;
-  guests: number;
-  occupancy: string;
-  roomType: string;
-  displayedPrice: string;
-  priceStatus: PriceStatus;
-  priceSnapshot: PriceSnapshot;
+  checkIn: string | null;
+  checkOut: string | null;
+  guests: number | null;
+  occupancy: string | null;
+  roomType: string | null;
+  displayedPrice: string | null;
+  priceStatus: PriceStatus | null;
+  priceSnapshot: PriceSnapshot | null;
   finalPayableAmount: number | null;
-  settlementMode: SettlementMode;
-  source: AvailabilityRequestSource;
-  customerNotes: string;
+  settlementMode: SettlementMode | null;
+  source: AvailabilityRequestSource | null;
+  customerNotes: string | null;
   status: AvailabilityRequestStatus;
   alternative: AlternativeProposal | null;
   partnerConfirmation: PartnerConfirmation | null;
   internalNotes: string[];
   auditTrail: AuditEntry[];
-  requestedAt: string;
+  requestedAt: string | null;
   partnerViewedAt: string | null;
   partnerRespondedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | null;
+  updatedAt: string | null;
   bookingId: string | null;
   paymentMode: SettlementMode | null;
 };
 
-const EVENT = "healingram-requests";
-
-let memory: AvailabilityRequest[] = [];
-
-function emit(): void {
-  window.dispatchEvent(new Event(EVENT));
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-function remember(request: AvailabilityRequest): AvailabilityRequest {
-  const idx = memory.findIndex((item) => item.requestId === request.requestId);
-  if (idx >= 0) memory[idx] = request;
-  else memory.unshift(request);
-  emit();
-  return request;
+function asNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function listAvailabilityRequests(): AvailabilityRequest[] {
-  return [...memory];
+function snapshotFromServer(item: ServerAvailability): PriceSnapshot | null {
+  const snap = item.snapshot;
+  if (!snap) {
+    return null;
+  }
+
+  const status = asString(snap.priceStatus)?.toUpperCase();
+  const capturedAt = asString(snap.capturedAt) ?? item.requestedAt;
+  if (!capturedAt) {
+    return null;
+  }
+
+  return {
+    priceStatus: status === "VERIFIED" || status === "ESTIMATED" ? status : "ON_REQUEST",
+    baseAmount: asNumber(snap.baseAmount),
+    taxAmount: asNumber(snap.taxAmount),
+    taxDisplay: "not_confirmed",
+    totalAmount: asNumber(snap.totalAmount),
+    occupancy: asString(snap.occupancy) ?? "",
+    roomType: asString(snap.roomType) ?? "",
+    durationNights: asNumber(snap.durationNights) ?? 0,
+    guests: asNumber(snap.guests) ?? 0,
+    currency: "INR",
+    label: asString(snap.label) ?? "",
+    capturedAt,
+  };
 }
 
-export function getAvailabilityRequest(requestId: string): AvailabilityRequest | undefined {
-  return memory.find((item) => item.requestId === requestId);
+function sourceFromServer(value: string | null | undefined): AvailabilityRequestSource | null {
+  return value === "listing" || value === "find_my_match" || value === "admin" || value === "expert"
+    ? value
+    : null;
+}
+
+function settlementFromServer(value: string | null | undefined): SettlementMode | null {
+  return value === "MARKETPLACE_SPLIT" || value === "PARTNER_DIRECT"
+    ? value
+    : null;
+}
+
+/** Display aliases of server statuses. Not invented business state. */
+export function mapServerAvailabilityStatus(status: string): AvailabilityRequestStatus {
+  switch (status.toUpperCase()) {
+    case "REQUESTED":
+      return "REQUESTED";
+    case "ALTERNATIVE_OFFERED":
+      return "ALTERNATIVE_PROPOSED";
+    case "UNAVAILABLE":
+      return "REJECTED";
+    case "CONFIRMED":
+      return "PAYMENT_PENDING";
+    case "PAID":
+      return "PAID";
+    case "CANCELLED":
+      return "CANCELLED";
+    case "REFUND_PENDING":
+      return "REFUND_PENDING";
+    case "REFUNDED":
+      return "REFUNDED";
+    case "COMPLETED":
+      return "COMPLETED";
+    default:
+      return status.toUpperCase() as AvailabilityRequestStatus;
+  }
+}
+
+export function toAvailabilityRequest(item: ServerAvailability): AvailabilityRequest {
+  const snapshot = snapshotFromServer(item);
+  const requestedAt = item.requestedAt ?? null;
+  return {
+    requestId: item.publicId,
+    customerId: item.customerUserId ?? null,
+    customerName: item.customerName ?? "",
+    customerEmail: item.email ?? "",
+    customerPhone: item.phone ?? "",
+    countryCode: item.countryCode ?? asString(item.snapshot?.countryCode),
+    retreatId: item.retreatSlug ?? "",
+    retreatName: item.retreatName ?? asString(item.snapshot?.retreatName),
+    programmeId: item.programmeSlug ?? "",
+    programmeName: item.programmeName ?? asString(item.snapshot?.programmeName),
+    durationNights: item.durationNights ?? snapshot?.durationNights ?? asNumber(item.snapshot?.durationNights),
+    durationUnit: "nights",
+    checkIn: item.checkIn ?? asString(item.snapshot?.checkIn),
+    checkOut: item.checkOut ?? asString(item.snapshot?.checkOut),
+    guests: item.guests ?? snapshot?.guests ?? asNumber(item.snapshot?.guests),
+    occupancy: item.occupancy ?? snapshot?.occupancy ?? asString(item.snapshot?.occupancy),
+    roomType: snapshot?.roomType ?? asString(item.snapshot?.roomType),
+    displayedPrice: snapshot?.label ?? null,
+    priceStatus: snapshot?.priceStatus ?? null,
+    priceSnapshot: snapshot,
+    finalPayableAmount: item.finalAmountInr ?? snapshot?.totalAmount ?? null,
+    settlementMode: settlementFromServer(item.settlementMode ?? asString(item.snapshot?.settlementMode)),
+    source: sourceFromServer(item.source ?? asString(item.snapshot?.source)),
+    customerNotes: item.customerNotes ?? asString(item.snapshot?.customerNotes),
+    status: mapServerAvailabilityStatus(item.status),
+    alternative: (item.alternative as AlternativeProposal | null) ?? null,
+    partnerConfirmation: null,
+    internalNotes: (item.internalNotes ?? []).map((note) => note.body),
+    auditTrail: (item.history ?? []).map((h) => ({
+      at: h.occurredAt,
+      actor:
+        h.actorRole === "partner" || h.actorRole === "admin" || h.actorRole === "customer"
+          ? h.actorRole
+          : "system",
+      action: h.toStatus,
+      detail: h.reason ?? undefined,
+    })),
+    requestedAt,
+    partnerViewedAt: item.partnerViewedAt ?? null,
+    partnerRespondedAt: item.partnerRespondedAt ?? null,
+    createdAt: requestedAt,
+    updatedAt: item.partnerRespondedAt ?? requestedAt,
+    bookingId: item.bookingNumber ?? null,
+    paymentMode: settlementFromServer(item.settlementMode),
+  };
+}
+
+/** @deprecated Use toAvailabilityRequest. Kept for existing imports. */
+export const mergeServerAvailability = toAvailabilityRequest;
+
+export async function fetchMyRequests(): Promise<AvailabilityRequest[]> {
+  const items = await fetchMyAvailabilityRequests();
+  return items.map(toAvailabilityRequest);
+}
+
+export async function fetchRequest(publicId: string): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(await getAvailabilityByPublicId(publicId));
 }
 
 export async function refreshMyRequests(): Promise<AvailabilityRequest[]> {
-  const items = await fetchMyAvailabilityRequests();
-  memory = items.map(mergeServerAvailability);
-  emit();
-  return listAvailabilityRequests();
+  return fetchMyRequests();
 }
 
 export async function refreshPartnerRequests(): Promise<AvailabilityRequest[]> {
   const items = await fetchPartnerQueue();
-  memory = items.map(mergeServerAvailability);
-  emit();
-  return listAvailabilityRequests();
+  return items.map(toAvailabilityRequest);
 }
 
 export async function refreshAdminRequests(): Promise<AvailabilityRequest[]> {
   const items = await fetchAdminQueue();
-  memory = items.map(mergeServerAvailability);
-  emit();
-  return listAvailabilityRequests();
+  return items.map(toAvailabilityRequest);
 }
 
 export async function loadAvailabilityRequest(requestId: string): Promise<AvailabilityRequest> {
-  const server = await getAvailabilityByPublicId(requestId);
-  return remember(mergeServerAvailability(server));
+  return fetchRequest(requestId);
 }
 
 export async function createAvailabilityRequest(input: {
@@ -186,157 +292,58 @@ export async function createAvailabilityRequest(input: {
     occupancy: input.occupancy,
     guests: input.guests,
     checkIn: input.checkIn,
+    checkOut: input.checkOut,
     customerName: input.customerName,
     email: input.customerEmail,
     phone: input.customerPhone,
     quoteId: input.quoteId,
+    source: input.source,
+    countryCode: input.countryCode,
+    customerNotes: input.customerNotes,
   });
-  return remember(mergeServerAvailability(server));
+  return toAvailabilityRequest(server);
 }
 
 export async function partnerConfirmAvailability(
   requestId: string,
   confirmation: Omit<PartnerConfirmation, "confirmedAt">,
-): Promise<AvailabilityRequest | null> {
-  const server = await partnerConfirmOnServer(requestId, confirmation.finalAmount);
-  return remember(mergeServerAvailability(server));
+): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(await partnerConfirmOnServer(requestId, confirmation.finalAmount));
 }
 
 export async function partnerSuggestAlternative(
   requestId: string,
   alternative: Omit<AlternativeProposal, "proposedAt">,
-): Promise<AvailabilityRequest | null> {
-  const server = await partnerAlternativeOnServer(requestId, {
-    ...alternative,
-    proposedAt: new Date().toISOString(),
-  });
-  return remember(mergeServerAvailability(server));
-}
-
-export async function partnerMarkUnavailable(requestId: string, reason?: string): Promise<AvailabilityRequest | null> {
-  const server = await partnerUnavailableOnServer(requestId, reason ?? "Dates not available");
-  return remember(mergeServerAvailability(server));
-}
-
-export async function customerAcceptAlternative(requestId: string): Promise<AvailabilityRequest | null> {
-  const server = await acceptAlternativeOnServer(requestId);
-  return remember(mergeServerAvailability(server));
-}
-
-export function markPartnerViewed(_requestId: string): void {
-  /* Partner view is recorded by the server when the queue is read. */
-}
-
-export function mapServerAvailabilityStatus(status: string): AvailabilityRequestStatus {
-  switch (status.toUpperCase()) {
-    case "REQUESTED":
-      return "REQUESTED";
-    case "ALTERNATIVE_OFFERED":
-      return "ALTERNATIVE_PROPOSED";
-    case "UNAVAILABLE":
-      return "REJECTED";
-    case "CONFIRMED":
-      return "PAYMENT_PENDING";
-    case "PAID":
-      return "PAID";
-    default:
-      return "REQUESTED";
-  }
-}
-
-function snapshotFromServer(item: ServerAvailability): PriceSnapshot {
-  const snap = item.snapshot ?? {};
-  const status = String(snap.priceStatus ?? "ON_REQUEST").toUpperCase();
-  return {
-    priceStatus: status === "VERIFIED" || status === "ESTIMATED" ? status : "ON_REQUEST",
-    baseAmount: typeof snap.baseAmount === "number" ? snap.baseAmount : null,
-    taxAmount: typeof snap.taxAmount === "number" ? snap.taxAmount : null,
-    taxDisplay: "not_confirmed",
-    totalAmount: typeof snap.totalAmount === "number" ? snap.totalAmount : null,
-    occupancy: typeof snap.occupancy === "string" ? snap.occupancy : "pending",
-    roomType: typeof snap.roomType === "string" ? snap.roomType : "",
-    durationNights: typeof snap.durationNights === "number" ? snap.durationNights : 0,
-    guests: typeof snap.guests === "number" ? snap.guests : 0,
-    currency: "INR",
-    label: typeof snap.label === "string" ? snap.label : "On request",
-    capturedAt: typeof snap.capturedAt === "string" ? snap.capturedAt : new Date().toISOString(),
-  };
-}
-
-export function mergeServerAvailability(item: ServerAvailability): AvailabilityRequest {
-  const snapshot = snapshotFromServer(item);
-  const now = item.requestedAt ?? new Date().toISOString();
-  return {
-    requestId: item.publicId,
-    customerId: null,
-    customerName: item.customerName ?? "Guest",
-    customerEmail: item.email ?? "",
-    customerPhone: item.phone ?? "",
-    countryCode: "+91",
-    retreatId: item.retreatSlug ?? "",
-    retreatName: item.retreatSlug ?? "Retreat",
-    programmeId: item.programmeSlug ?? "",
-    programmeName: item.programmeSlug ?? "Programme",
-    durationNights: snapshot.durationNights || 0,
-    durationUnit: "nights",
-    checkIn: typeof item.snapshot?.checkIn === "string" ? item.snapshot.checkIn : "",
-    checkOut: "",
-    guests: snapshot.guests || 0,
-    occupancy: snapshot.occupancy === "pending" ? "" : String(snapshot.occupancy),
-    roomType: snapshot.roomType,
-    displayedPrice: snapshot.label,
-    priceStatus: snapshot.priceStatus,
-    priceSnapshot: snapshot,
-    finalPayableAmount: item.finalAmountInr ?? snapshot.totalAmount,
-    settlementMode: "MARKETPLACE_SPLIT",
-    source: "listing",
-    customerNotes: "",
-    status: mapServerAvailabilityStatus(item.status),
-    alternative: (item.alternative as AlternativeProposal | null) ?? null,
-    partnerConfirmation: null,
-    internalNotes: [],
-    auditTrail: (item.history ?? []).map((h) => ({
-      at: h.occurredAt,
-      actor: "system",
-      action: h.toStatus,
-      detail: h.reason ?? undefined,
-    })),
-    requestedAt: now,
-    partnerViewedAt: item.partnerViewedAt ?? null,
-    partnerRespondedAt: item.partnerRespondedAt ?? null,
-    createdAt: now,
-    updatedAt: now,
-    bookingId: null,
-    paymentMode: null,
-  };
-}
-
-export function mergeServerAvailabilityList(items: ServerAvailability[]): void {
-  memory = items.map(mergeServerAvailability);
-  emit();
-}
-
-export function listCustomerTrips(): AvailabilityRequest[] {
-  return listAvailabilityRequests().filter((item) =>
-    ["PAYMENT_PENDING", "PAID", "CONFIRMED", "COMPLETED"].includes(item.status),
+): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(
+    await partnerAlternativeOnServer(requestId, {
+      ...alternative,
+      proposedAt: new Date().toISOString(),
+    }),
   );
 }
 
-export function customerRequestsFor(_customerId: string | null): AvailabilityRequest[] {
-  return listAvailabilityRequests();
+export async function partnerMarkUnavailable(requestId: string, reason?: string): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(await partnerUnavailableOnServer(requestId, reason ?? "Dates not available"));
 }
 
-export function partnerQueue(): AvailabilityRequest[] {
-  return listAvailabilityRequests();
+export async function customerAcceptAlternative(requestId: string): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(await acceptAlternativeOnServer(requestId));
+}
+
+export async function customerCancelRequest(requestId: string): Promise<AvailabilityRequest> {
+  return toAvailabilityRequest(await cancelAvailabilityOnServer(requestId));
 }
 
 export function isAgingRequest(request: AvailabilityRequest): boolean {
+  if (!request.requestedAt) return false;
   const started = Date.parse(request.requestedAt);
   if (Number.isNaN(started)) return false;
   return Date.now() - started > 24 * 60 * 60 * 1000 && request.status === "REQUESTED";
 }
 
 export function requestAgeLabel(request: AvailabilityRequest): string {
+  if (!request.requestedAt) return "";
   const started = Date.parse(request.requestedAt);
   if (Number.isNaN(started)) return "";
   const hours = Math.max(0, Math.round((Date.now() - started) / (60 * 60 * 1000)));
@@ -344,11 +351,11 @@ export function requestAgeLabel(request: AvailabilityRequest): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-export async function adminAddInternalNote(requestId: string, note: string): Promise<void> {
+export async function adminAddInternalNote(requestId: string, note: string): Promise<AvailabilityRequest> {
   const { apiFetch } = await import("./api/client");
   await apiFetch(`/api/admin/availability/${encodeURIComponent(requestId)}/note`, {
     method: "POST",
     body: JSON.stringify({ note }),
   });
-  await loadAvailabilityRequest(requestId);
+  return fetchRequest(requestId);
 }

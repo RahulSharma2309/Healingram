@@ -135,6 +135,9 @@ internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
         => Task.FromResult(Bookings.FirstOrDefault(b =>
             string.Equals(b.PublicId, publicId, StringComparison.Ordinal)));
 
+    public Task<BookingPaymentGate?> FindByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken)
+        => Task.FromResult(Bookings.FirstOrDefault(b => b.BookingId == bookingId));
+
     public int FailNextMarkPaid { get; set; }
 
     public Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
