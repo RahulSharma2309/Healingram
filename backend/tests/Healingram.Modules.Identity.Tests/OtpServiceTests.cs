@@ -126,10 +126,10 @@ public class OtpServiceTests
         var service = AuthTestKit.Create(store);
 
         await service.StartGuestVerificationAsync(
-            new GuestVerifyStartRequest("admin@local.test", null, "email"),
+            new GuestVerifyStartRequest("admin@local.test", null, "email", "HR-2026-10001"),
             CancellationToken.None);
         var verified = await service.VerifyGuestAsync(
-            new GuestVerifyRequest("admin@local.test", null, GuestVerification.DevCode),
+            new GuestVerifyRequest("admin@local.test", null, GuestVerification.DevCode, "HR-2026-10001"),
             CancellationToken.None);
 
         Assert.Equal(AuthStatus.Ok, verified.Status);

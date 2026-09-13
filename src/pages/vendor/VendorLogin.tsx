@@ -24,7 +24,7 @@ export function VendorLogin() {
     setBusy(true);
     setError(null);
     try {
-      const session = await loginWithPassword(email.trim(), password, false);
+      const session = await loginWithPassword(email.trim(), password, false, "vendor");
       const vendorOk = userHasRole(session.user, "admin")
         || (userHasRole(session.user, "partner") && userHasActivePartnerMembership(session.user));
       if (!vendorOk) {

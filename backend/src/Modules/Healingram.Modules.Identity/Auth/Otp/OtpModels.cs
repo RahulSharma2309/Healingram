@@ -14,6 +14,7 @@ internal sealed class OtpSettings
     public int ExpiryMinutes { get; init; } = 10;
     public int MaxAttempts { get; init; } = 5;
     public int ResendSeconds { get; init; } = 30;
+    public int MaxStartsPerHour { get; init; } = 30;
 
     public static OtpSettings From(IConfiguration configuration, bool development)
         => new()
@@ -25,7 +26,8 @@ internal sealed class OtpSettings
             DemoMode = configuration.GetValue("DemoMode", development),
             ExpiryMinutes = configuration.GetValue("Otp:ExpiryMinutes", 10),
             MaxAttempts = configuration.GetValue("Otp:MaxAttempts", 5),
-            ResendSeconds = configuration.GetValue("Otp:ResendSeconds", 30)
+            ResendSeconds = configuration.GetValue("Otp:ResendSeconds", 30),
+            MaxStartsPerHour = configuration.GetValue("Otp:MaxStartsPerHour", 30)
         };
 }
 
@@ -55,6 +57,7 @@ internal interface IOtpChallengeStore
     Task SetProviderReferenceAsync(Guid id, string? providerReference, CancellationToken cancellationToken);
     Task<bool> TryIncrementAttemptsAsync(Guid id, CancellationToken cancellationToken);
     Task<bool> TryConsumeAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<int> CountCreatedSinceAsync(string destination, DateTimeOffset since, CancellationToken cancellationToken);
 }
 
 internal static class OtpHashes

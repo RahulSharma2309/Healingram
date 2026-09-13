@@ -1,0 +1,54 @@
+using Healingram.BuildingBlocks.Persistence;
+using Xunit;
+
+namespace Healingram.Api.Tests;
+
+public class SchemaInstallerTests
+{
+    [Fact]
+    public void Pending_files_skip_already_applied_ids()
+    {
+        var files = new[]
+        {
+            @"C:\db\001_schemas.sql",
+            @"C:\db\010_enterprise_foundation.sql",
+            @"C:\db\011_enterprise_hardening.sql"
+        };
+        var applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "001_schemas.sql",
+            "010_enterprise_foundation.sql"
+        };
+
+        var pending = SchemaInstaller.PendingFiles(files, applied);
+
+        Assert.Equal(["011_enterprise_hardening.sql"], pending.Select(SchemaInstaller.MigrationId));
+        Assert.Equal("011", SchemaInstaller.MigrationVersion(pending[0]));
+    }
+
+    [Fact]
+    public void Migration_id_is_the_filename()
+    {
+        Assert.Equal("011_enterprise_hardening.sql", SchemaInstaller.MigrationId("backend/db/011_enterprise_hardening.sql"));
+        Assert.Equal("001", SchemaInstaller.MigrationVersion("001_schemas.sql"));
+    }
+
+    [Fact]
+    public void Legacy_ledger_records_older_scripts_on_existing_databases()
+    {
+        var files = new[]
+        {
+            "001_schemas.sql",
+            "010_enterprise_foundation.sql",
+            "011_enterprise_hardening.sql"
+        };
+
+        var withoutHardening = SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: true, hasHardeningColumns: false);
+        Assert.Equal(["001_schemas.sql", "010_enterprise_foundation.sql"], withoutHardening);
+
+        var withHardening = SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: true, hasHardeningColumns: true);
+        Assert.Equal(3, withHardening.Count);
+
+        Assert.Empty(SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: false, hasHardeningColumns: false));
+    }
+}

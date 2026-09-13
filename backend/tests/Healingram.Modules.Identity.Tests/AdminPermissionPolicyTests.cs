@@ -38,6 +38,48 @@ public class AdminPermissionPolicyTests
     }
 
     [Fact]
+    public async Task Permission_without_admin_role_is_denied()
+    {
+        var store = new InMemoryIdentityStore();
+        var customer = await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "ops@local.test", "Ops", Roles.Customer, "active"),
+            new AspNetIdentityPasswordHasher().Hash("Local123!"),
+            CancellationToken.None);
+        store.ReplaceAdminPermissions(customer.Id, AdminPermissions.RequestsRead, AdminPermissions.PaymentsSimulate);
+
+        var authorization = BuildAuthorization(store);
+        var read = await authorization.AuthorizeAsync(Principal(customer.Id, Roles.Customer), IdentityPolicies.AdminRequestsRead);
+        var simulate = await authorization.AuthorizeAsync(Principal(customer.Id, Roles.Customer), IdentityPolicies.AdminPaymentsSimulate);
+
+        Assert.False(read.Succeeded);
+        Assert.False(simulate.Succeeded);
+    }
+
+    [Fact]
+    public async Task Payment_simulate_requires_admin_and_specific_permission()
+    {
+        var store = new InMemoryIdentityStore();
+        var hasher = new AspNetIdentityPasswordHasher();
+        var allowed = await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "pay-admin@local.test", "Pay", Roles.Admin, "active"),
+            hasher.Hash("Local123!"),
+            CancellationToken.None);
+        var denied = await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "notes-admin@local.test", "Notes", Roles.Admin, "active"),
+            hasher.Hash("Local123!"),
+            CancellationToken.None);
+        store.ReplaceAdminPermissions(allowed.Id, AdminPermissions.PaymentsSimulate);
+        store.ReplaceAdminPermissions(denied.Id, AdminPermissions.RequestsManage);
+
+        var authorization = BuildAuthorization(store);
+        var ok = await authorization.AuthorizeAsync(Principal(allowed.Id, Roles.Admin), IdentityPolicies.AdminPaymentsSimulate);
+        var blocked = await authorization.AuthorizeAsync(Principal(denied.Id, Roles.Admin), IdentityPolicies.AdminPaymentsSimulate);
+
+        Assert.True(ok.Succeeded);
+        Assert.False(blocked.Succeeded);
+    }
+
+    [Fact]
     public async Task Partner_write_requires_an_active_membership()
     {
         var store = new InMemoryIdentityStore();

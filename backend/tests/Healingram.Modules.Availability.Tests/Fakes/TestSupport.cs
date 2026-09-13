@@ -21,11 +21,18 @@ internal sealed class RecordingBookingCommands : IBookingCommands
 {
     public List<CreateAwaitingPaymentBooking> Calls { get; } = [];
 
+    public Exception? ThrowOnCreate { get; set; }
+
     public Task<BookingRef> CreateAwaitingPaymentAsync(
         CreateAwaitingPaymentBooking command,
         CancellationToken cancellationToken)
     {
         Calls.Add(command);
+        if (ThrowOnCreate is not null)
+        {
+            throw ThrowOnCreate;
+        }
+
         return Task.FromResult(new BookingRef(Guid.NewGuid(), "BK-2026-10001", BookingStatuses.AwaitingPayment));
     }
 }

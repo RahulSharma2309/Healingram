@@ -25,7 +25,7 @@ internal sealed record UpdateProfileRequest(
     string? Phone,
     string? Email,
     string? Address);
-internal sealed record LoginRequest(string? Email, string? Password);
+internal sealed record LoginRequest(string? Email, string? Password, string? Portal = null);
 internal sealed record RefreshRequest(string? RefreshToken);
 internal sealed record LogoutRequest(string? RefreshToken);
 internal sealed record GuestVerifyStartRequest(
@@ -202,6 +202,12 @@ internal sealed class AuthService(
             return AuthResult.Invalid("this verification path cannot grant staff access");
         }
 
+        if (string.Equals(purpose, OtpPurposes.RequestAccess, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(request.PublicId))
+        {
+            return AuthResult.Invalid("publicId is required");
+        }
+
         var destination = DestinationOf(request.Email, request.Phone);
         var user = await FindGuestContactAsync(request.Email, request.Phone, cancellationToken);
         var started = await otp.StartAsync(
@@ -235,6 +241,11 @@ internal sealed class AuthService(
         if (OtpPurposes.IsPrivileged(purpose) || purpose != OtpPurposes.RequestAccess)
         {
             return AuthResult.Invalid("this verification path is only for request access");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PublicId))
+        {
+            return AuthResult.Invalid("publicId is required");
         }
 
         var destination = DestinationOf(request.Email, request.Phone);
@@ -345,6 +356,12 @@ internal sealed class AuthService(
             return AuthResult.Rejected("Invalid credentials");
         }
 
+        var portalDenied = DenyPortal(request.Portal, user, await store.ListRolesAsync(user.Id, cancellationToken));
+        if (portalDenied is not null)
+        {
+            return AuthResult.Rejected(portalDenied);
+        }
+
         logger.LogInformation("User {UserId} signed in", user.Id);
         if (audit is not null)
         {
@@ -382,7 +399,18 @@ internal sealed class AuthService(
         }
 
         await store.RevokeRefreshTokenAsync(stored.Id, cancellationToken);
-        return AuthResult.Ok(await IssueTokensAsync(user, cancellationToken));
+        AccessTokenIssue? issue = null;
+        if (string.Equals(stored.AuthKind, AuthKinds.GuestRequest, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(stored.Purpose, OtpPurposes.RequestAccess, StringComparison.OrdinalIgnoreCase))
+        {
+            issue = new AccessTokenIssue(
+                stored.Purpose ?? OtpPurposes.RequestAccess,
+                stored.RequestId,
+                [Roles.Customer],
+                AuthKinds.GuestRequest);
+        }
+
+        return AuthResult.Ok(await IssueTokensAsync(user, cancellationToken, issue));
     }
 
     public async Task<AuthResult> LogoutAsync(LogoutRequest request, CancellationToken cancellationToken)
@@ -434,11 +462,19 @@ internal sealed class AuthService(
         var roles = issue?.Roles is { Count: > 0 } listed
             ? RoleAuthorization.NormalizeRoles(listed)
             : RoleAuthorization.NormalizeRoles(storedRoles, user.Role);
-        var refresh = tokens.CreateRefreshToken();
-        await store.StoreRefreshTokenAsync(Guid.NewGuid(), user.Id, refresh.Hash, refresh.ExpiresAt, cancellationToken);
         var issued = issue is null
             ? new AccessTokenIssue(Roles: roles, AuthKind: AuthKinds.Registered)
             : issue with { Roles = roles, AuthKind = issue.AuthKind ?? AuthKinds.Registered };
+        var refresh = tokens.CreateRefreshToken();
+        await store.StoreRefreshTokenAsync(
+            Guid.NewGuid(),
+            user.Id,
+            refresh.Hash,
+            refresh.ExpiresAt,
+            cancellationToken,
+            issued.AuthKind,
+            issued.Purpose,
+            issued.RequestId);
         return new TokenResponse(
             tokens.CreateAccessToken(user, issued),
             refresh.Token,
@@ -528,6 +564,28 @@ internal sealed class AuthService(
             user.AccountStatus,
             resolved,
             memberships);
+    }
+
+    private static string? DenyPortal(string? portal, IdentityUser user, IReadOnlyList<string> storedRoles)
+    {
+        var wanted = portal?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(wanted) || wanted is "customer")
+        {
+            return null;
+        }
+
+        var roles = RoleAuthorization.NormalizeRoles(storedRoles, user.Role);
+        if (wanted is "admin" && !RoleAuthorization.SatisfiesAdminWrite(roles))
+        {
+            return "This account is not an admin.";
+        }
+
+        if (wanted is "vendor" && !RoleAuthorization.SatisfiesPartnerWrite(roles))
+        {
+            return "This account is not a retreat partner.";
+        }
+
+        return null;
     }
 
     private static List<string> ValidateCredentials(string? email, string? password, bool requireNewPassword, out string normalizedEmail)

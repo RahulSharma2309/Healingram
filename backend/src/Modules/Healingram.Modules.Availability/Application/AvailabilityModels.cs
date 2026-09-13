@@ -109,6 +109,9 @@ internal sealed record AvailabilityOutcome(
     public static AvailabilityOutcome Conflict(AvailabilityRequestEntity entity)
         => new(AvailabilityOutcomeKind.Conflict, entity, "Idempotency conflict");
 
+    public static AvailabilityOutcome Stale(string detail)
+        => new(AvailabilityOutcomeKind.Conflict, Error: detail, Details: [detail]);
+
     public static AvailabilityOutcome Invalid(params string[] details)
         => new(AvailabilityOutcomeKind.Validation, Error: "Validation failed", Details: details);
 

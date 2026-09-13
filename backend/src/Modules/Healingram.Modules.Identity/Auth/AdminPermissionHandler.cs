@@ -18,6 +18,11 @@ internal sealed class AdminPermissionHandler(IAdminAuthorization admin) : Author
             return;
         }
 
+        if (!RoleAuthorization.CanAuthorizeAdminWrite(context.User))
+        {
+            return;
+        }
+
         if (await admin.HasPermissionAsync(userId, requirement.Permission, CancellationToken.None))
         {
             context.Succeed(requirement);

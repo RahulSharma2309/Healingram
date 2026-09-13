@@ -16,7 +16,10 @@ internal sealed record RefreshTokenRecord(
     Guid Id,
     Guid UserId,
     DateTimeOffset ExpiresAt,
-    DateTimeOffset? RevokedAt);
+    DateTimeOffset? RevokedAt,
+    string? AuthKind = null,
+    string? Purpose = null,
+    string? RequestId = null);
 
 internal sealed class DuplicateEmailException : Exception;
 
@@ -30,7 +33,15 @@ internal interface IIdentityStore
     Task<IdentityUser> PromoteGuestAsync(IdentityUser user, string passwordHash, CancellationToken cancellationToken);
     Task<IdentityUser> UpdateProfileAsync(IdentityUser user, CancellationToken cancellationToken);
     Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken);
-    Task StoreRefreshTokenAsync(Guid id, Guid userId, string tokenHash, DateTimeOffset expiresAt, CancellationToken cancellationToken);
+    Task StoreRefreshTokenAsync(
+        Guid id,
+        Guid userId,
+        string tokenHash,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken,
+        string? authKind = null,
+        string? purpose = null,
+        string? requestId = null);
     Task<RefreshTokenRecord?> FindActiveRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
     Task RevokeRefreshTokenAsync(Guid tokenId, CancellationToken cancellationToken);
     Task<IReadOnlyList<string>> ListWishlistSlugsAsync(Guid userId, CancellationToken cancellationToken);

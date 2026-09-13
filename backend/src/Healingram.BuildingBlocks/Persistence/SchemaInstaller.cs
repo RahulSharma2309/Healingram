@@ -16,15 +16,175 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+        await EnsureMigrationsTableAsync(connection, cancellationToken);
+
+        var applied = await LoadAppliedAsync(connection, cancellationToken);
+        if (applied.Count == 0)
+        {
+            var legacy = await DetectLegacyAppliedAsync(connection, sqlFiles, cancellationToken);
+            foreach (var id in legacy)
+            {
+                await RecordAppliedAsync(connection, null, id, MigrationVersion(id), cancellationToken);
+                applied.Add(id);
+                logger.LogInformation("Recorded already-installed schema script {Id} without re-running it", id);
+            }
+        }
 
         foreach (var sqlPath in sqlFiles)
         {
+            var id = MigrationId(sqlPath);
+            if (applied.Contains(id))
+            {
+                logger.LogInformation("Postgres schema script {Id} already applied — skipping", id);
+                continue;
+            }
+
             var sql = await File.ReadAllTextAsync(sqlPath, cancellationToken);
-            await using var command = new NpgsqlCommand(sql, connection);
-            command.CommandTimeout = 60;
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await using (var command = new NpgsqlCommand(sql, connection, tx))
+                {
+                    command.CommandTimeout = 60;
+                    await command.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                await RecordAppliedAsync(connection, tx, id, MigrationVersion(sqlPath), cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await tx.RollbackAsync(cancellationToken);
+                throw;
+            }
+
             logger.LogInformation("Postgres schema script applied from {Path}", sqlPath);
         }
+    }
+
+    internal static string MigrationId(string path) => Path.GetFileName(path);
+
+    internal static string MigrationVersion(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        var digits = new string(name.TakeWhile(char.IsDigit).ToArray());
+        return digits.Length > 0 ? digits : name;
+    }
+
+    internal static IReadOnlyList<string> PendingFiles(IReadOnlyList<string> sqlFiles, IReadOnlySet<string> applied)
+        => sqlFiles.Where(file => !applied.Contains(MigrationId(file))).ToArray();
+
+    /// <summary>
+    /// Existing local databases were created by re-running numbered SQL files.
+    /// When the ledger is empty but core tables already exist, record those
+    /// older scripts as applied so they are not executed again.
+    /// </summary>
+    internal static IReadOnlyList<string> LegacyIdsToRecord(
+        IReadOnlyList<string> sqlFiles,
+        bool hasExistingSchema,
+        bool hasHardeningColumns)
+    {
+        if (!hasExistingSchema)
+        {
+            return [];
+        }
+
+        var recorded = new List<string>();
+        foreach (var file in sqlFiles)
+        {
+            var id = MigrationId(file);
+            if (!int.TryParse(MigrationVersion(file), out var version))
+            {
+                continue;
+            }
+
+            if (version < 11 || (version == 11 && hasHardeningColumns))
+            {
+                recorded.Add(id);
+            }
+        }
+
+        return recorded;
+    }
+
+    private static async Task EnsureMigrationsTableAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            CREATE TABLE IF NOT EXISTS public.schema_migrations (
+                id          text PRIMARY KEY,
+                version     text NOT NULL,
+                applied_at  timestamptz NOT NULL DEFAULT now()
+            )
+            """,
+            connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<HashSet<string>> LoadAppliedAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand("SELECT id FROM public.schema_migrations", connection);
+        var applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            applied.Add(reader.GetString(0));
+        }
+
+        return applied;
+    }
+
+    private static async Task<IReadOnlyList<string>> DetectLegacyAppliedAsync(
+        NpgsqlConnection connection,
+        IReadOnlyList<string> sqlFiles,
+        CancellationToken cancellationToken)
+    {
+        var hasExistingSchema = await ScalarTrueAsync(
+            connection,
+            "SELECT to_regclass('availability.requests') IS NOT NULL",
+            cancellationToken);
+        var hasHardeningColumns = await ScalarTrueAsync(
+            connection,
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'payment'
+                  AND table_name = 'webhook_events'
+                  AND column_name = 'processing_status')
+            """,
+            cancellationToken);
+        return LegacyIdsToRecord(sqlFiles, hasExistingSchema, hasHardeningColumns);
+    }
+
+    private static async Task<bool> ScalarTrueAsync(
+        NpgsqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is true;
+    }
+
+    private static async Task RecordAppliedAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        string id,
+        string version,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO public.schema_migrations (id, version, applied_at)
+            VALUES (@id, @version, now())
+            ON CONFLICT (id) DO NOTHING
+            """,
+            connection,
+            transaction);
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("version", version);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>

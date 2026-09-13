@@ -1,4 +1,5 @@
 using Healingram.Contracts.Booking;
+using Healingram.Contracts.Payment;
 using Healingram.Modules.Payment.Application;
 using Healingram.Modules.Payment.Infrastructure;
 using Healingram.Modules.Payment.Persistence;
@@ -18,6 +19,10 @@ internal sealed class InMemoryPaymentStore : IPaymentStore
     public Task<PaymentIntentEntity?> FindByIdempotencyKeyAsync(string key, CancellationToken cancellationToken)
         => Task.FromResult(Intents.FirstOrDefault(i => i.IdempotencyKey == key));
 
+    public Task<PaymentIntentEntity?> FindOpenByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken)
+        => Task.FromResult(Intents.FirstOrDefault(i =>
+            i.BookingId == bookingId && PaymentStatuses.IsOpen(i.Status)));
+
     public Task InsertAsync(PaymentIntentEntity entity, CancellationToken cancellationToken)
     {
         if (Intents.Any(i => i.IdempotencyKey == entity.IdempotencyKey))
@@ -25,16 +30,38 @@ internal sealed class InMemoryPaymentStore : IPaymentStore
             throw new DuplicatePaymentIdempotencyException();
         }
 
+        if (PaymentStatuses.IsOpen(entity.Status)
+            && Intents.Any(i => i.BookingId == entity.BookingId && PaymentStatuses.IsOpen(i.Status)))
+        {
+            throw new DuplicateOpenPaymentException();
+        }
+
         Intents.Add(entity);
         MutationCount++;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateIntentAsync(PaymentIntentEntity entity, CancellationToken cancellationToken)
+    {
+        var index = Intents.FindIndex(i => i.Id == entity.Id);
+        if (index >= 0)
+        {
+            Intents[index] = entity;
+            MutationCount++;
+        }
+
         return Task.CompletedTask;
     }
 
     public Task MarkIntentPaidAsync(Guid intentId, CancellationToken cancellationToken)
     {
         var intent = Intents.First(i => i.Id == intentId);
-        intent.Status = PaymentStatuses.Paid;
-        MutationCount++;
+        if (PaymentStatuses.IsOpen(intent.Status) || string.Equals(intent.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
+        {
+            intent.Status = PaymentStatuses.Paid;
+            MutationCount++;
+        }
+
         return Task.CompletedTask;
     }
 
@@ -59,6 +86,44 @@ internal sealed class InMemoryPaymentStore : IPaymentStore
         MutationCount++;
         return Task.FromResult(true);
     }
+
+    public Task SetWebhookProcessingAsync(
+        string providerEventId,
+        string status,
+        string? error,
+        DateTimeOffset? processedAt,
+        CancellationToken cancellationToken)
+    {
+        _ = providerEventId;
+        _ = status;
+        _ = error;
+        _ = processedAt;
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class RecordingPaymentProvider : IPaymentProvider
+{
+    public string Name => PaymentProviders.Local;
+    public int CreateCalls { get; private set; }
+    public Exception? ThrowOnCreate { get; set; }
+
+    public Task<ProviderPaymentRef> CreatePaymentAsync(CreateProviderPayment request, CancellationToken cancellationToken)
+    {
+        CreateCalls++;
+        if (ThrowOnCreate is not null)
+        {
+            throw ThrowOnCreate;
+        }
+
+        return Task.FromResult(new ProviderPaymentRef(
+            Name,
+            $"local_{request.IntentId:N}",
+            $"/pay/local/{request.IntentId}"));
+    }
+
+    public PaymentWebhookVerifyResult VerifyWebhook(string? providedSecret, string rawBody)
+        => new LocalPaymentProvider(new PaymentSettings()).VerifyWebhook(providedSecret, rawBody);
 }
 
 internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
@@ -118,7 +183,10 @@ internal static class PaymentHarness
     public const string WebhookSecret = PaymentSettings.DefaultFakeWebhookSecret;
 
     public static (PaymentService Service, InMemoryPaymentStore Store, FakeBookingPaymentPort Bookings)
-        Create(BookingPaymentGate? booking = null, PaymentSettings? settings = null)
+        Create(
+            BookingPaymentGate? booking = null,
+            PaymentSettings? settings = null,
+            IPaymentProvider? provider = null)
     {
         var store = new InMemoryPaymentStore();
         var bookings = new FakeBookingPaymentPort();
@@ -131,7 +199,7 @@ internal static class PaymentHarness
         var service = new PaymentService(
             store,
             bookings,
-            new LocalPaymentProvider(paymentSettings),
+            provider ?? new LocalPaymentProvider(paymentSettings),
             paymentSettings,
             TimeProvider.System,
             NullLogger<PaymentService>.Instance);

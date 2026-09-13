@@ -6,9 +6,11 @@
 /vendor (partner JWT)
   → GET /api/partner/availability
   → POST /api/availability/requests/{publicId}/confirm
-  → Availability + Booking port
-  → INSERT booking.bookings (awaiting_payment)
+  → Availability + Booking port (one database transaction in the API)
+  → conditional UPDATE availability.requests WHERE status = expected
+  → INSERT booking.bookings (awaiting_payment; idempotent per request_id)
   → notifications.outbox
+  A retry of an already CONFIRMED request returns the existing state and reuses the booking. A stale partner update returns 409.
 ```
 
 Policy: `PartnerWrite` = authenticated + partner/admin role + **active partner membership** (admins skip membership). Customer token → `403`.

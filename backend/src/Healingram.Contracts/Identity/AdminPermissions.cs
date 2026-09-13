@@ -11,6 +11,7 @@ public static class AdminPermissions
     public const string BookingsRead = "bookings.read";
     public const string BookingsManage = "bookings.manage";
     public const string PaymentsRead = "payments.read";
+    public const string PaymentsSimulate = "payments.simulate";
     public const string RefundsManage = "refunds.manage";
     public const string UsersRead = "users.read";
     public const string UsersManage = "users.manage";
@@ -27,6 +28,7 @@ public static class AdminPermissions
         BookingsRead,
         BookingsManage,
         PaymentsRead,
+        PaymentsSimulate,
         RefundsManage,
         UsersRead,
         UsersManage,

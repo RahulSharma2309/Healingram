@@ -31,7 +31,7 @@ internal static class PaymentEndpoints
             }
 
             return await Handle(service.CreateIntentAsync(body, ActorOf(user), cancellationToken));
-        }).RequireAuthorization().RequireRateLimiting("sensitive");
+        }).RequireAuthorization().RequireRateLimiting("payment-create");
 
         payment.MapGet("/intents/{id:guid}", async (
             Guid id,
@@ -69,7 +69,9 @@ internal static class PaymentEndpoints
             }
 
             return Handle(service.HandleFakeWebhookAsync(settings.WebhookSecret, body, cancellationToken));
-        }).RequireAuthorization(IdentityPolicies.AdminWrite).WithTags("Admin");
+        }).RequireAuthorization(IdentityPolicies.AdminPaymentsSimulate)
+            .RequireRateLimiting("payment-simulate")
+            .WithTags("Admin");
     }
 
     private static Task<IResult> LocalWebhook(
@@ -95,10 +97,8 @@ internal static class PaymentEndpoints
     {
         var raw = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
         Guid? userId = Guid.TryParse(raw, out var parsed) ? parsed : null;
-        var guest = string.Equals(
-            user.FindFirstValue("account_status"),
-            AccountStatuses.Guest,
-            StringComparison.OrdinalIgnoreCase);
+        var guest = IsGuestAccount(user)
+            || string.Equals(RoleAuthorization.GetAuthKind(user), AuthKinds.GuestRequest, StringComparison.OrdinalIgnoreCase);
         return new PaymentActor(userId, guest, RoleAuthorization.CanAuthorizeAdminWrite(user));
     }
 
@@ -127,9 +127,13 @@ internal static class PaymentEndpoints
 
     private static bool IsGuestAccount(ClaimsPrincipal user)
         => string.Equals(
-            user.FindFirstValue("account_status"),
-            AccountStatuses.Guest,
-            StringComparison.OrdinalIgnoreCase);
+               user.FindFirstValue("account_status"),
+               AccountStatuses.Guest,
+               StringComparison.OrdinalIgnoreCase)
+           || string.Equals(
+               RoleAuthorization.GetAuthKind(user),
+               AuthKinds.GuestRequest,
+               StringComparison.OrdinalIgnoreCase);
 
     internal static object ToDto(PaymentIntentEntity entity)
         => new

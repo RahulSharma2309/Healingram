@@ -35,8 +35,13 @@ public class MultiRoleAndAdminPermissionTests
         await store.GrantAdminPermissionAsync(user.Id, AdminPermissions.RequestsRead, CancellationToken.None);
         var authz = new AdminAuthorization(store);
 
-        Assert.True(await authz.HasPermissionAsync(user.Id, AdminPermissions.RequestsRead, CancellationToken.None));
-        Assert.False(await authz.HasPermissionAsync(user.Id, AdminPermissions.VendorsManage, CancellationToken.None));
+        Assert.False(await authz.HasPermissionAsync(user.Id, AdminPermissions.RequestsRead, CancellationToken.None));
+
+        var admin = new IdentityUser(Guid.NewGuid(), "limited-admin@local.test", "Limited", Roles.Admin, "active");
+        await store.CreateUserAsync(admin, new AspNetIdentityPasswordHasher().Hash("Local123!"), CancellationToken.None);
+        store.ReplaceAdminPermissions(admin.Id, AdminPermissions.RequestsRead);
+        Assert.True(await authz.HasPermissionAsync(admin.Id, AdminPermissions.RequestsRead, CancellationToken.None));
+        Assert.False(await authz.HasPermissionAsync(admin.Id, AdminPermissions.VendorsManage, CancellationToken.None));
     }
 
     [Fact]

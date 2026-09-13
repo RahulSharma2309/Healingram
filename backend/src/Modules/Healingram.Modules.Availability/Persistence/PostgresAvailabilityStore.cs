@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Healingram.BuildingBlocks.Persistence;
 using Healingram.Modules.Availability.Application;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
@@ -29,92 +30,106 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
         return Convert.ToInt64(result);
     }
 
-    public async Task InsertAsync(AvailabilityRequestEntity entity, CancellationToken cancellationToken)
-    {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            await using (var insert = new NpgsqlCommand(
-                """
-                INSERT INTO availability.requests (
-                    id, public_id, customer_user_id, customer_name, customer_email, customer_phone,
-                    retreat_id, programme_id, retreat_slug, programme_slug, status, price_snapshot,
-                    idempotency_key, requested_at, partner_viewed_at, partner_responded_at, final_amount_inr)
-                VALUES (
-                    @id, @publicId, @customerUserId, @customerName, @customerEmail, @customerPhone,
-                    @retreatId, @programmeId, @retreatSlug, @programmeSlug, @status, @snapshot,
-                    @idempotencyKey, @requestedAt, @viewedAt, @respondedAt, @finalAmount)
-                """,
-                connection,
-                tx))
+    public Task InsertAsync(AvailabilityRequestEntity entity, CancellationToken cancellationToken)
+        => PostgresWork.WriteAsync(
+            PostgresWork.ConnectionString(configuration),
+            async (connection, tx, ct) =>
             {
-                BindEntity(insert, entity);
-                await insert.ExecuteNonQueryAsync(cancellationToken);
-            }
+                try
+                {
+                    await using (var insert = new NpgsqlCommand(
+                        """
+                        INSERT INTO availability.requests (
+                            id, public_id, customer_user_id, customer_name, customer_email, customer_phone,
+                            retreat_id, programme_id, retreat_slug, programme_slug, status, price_snapshot,
+                            idempotency_key, requested_at, partner_viewed_at, partner_responded_at, final_amount_inr)
+                        VALUES (
+                            @id, @publicId, @customerUserId, @customerName, @customerEmail, @customerPhone,
+                            @retreatId, @programmeId, @retreatSlug, @programmeSlug, @status, @snapshot,
+                            @idempotencyKey, @requestedAt, @viewedAt, @respondedAt, @finalAmount)
+                        """,
+                        connection,
+                        tx))
+                    {
+                        BindEntity(insert, entity);
+                        await insert.ExecuteNonQueryAsync(ct);
+                    }
 
-            foreach (var history in entity.History)
+                    foreach (var history in entity.History)
+                    {
+                        await InsertHistoryAsync(connection, tx, entity.Id, history, ct);
+                    }
+
+                    return true;
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation
+                                                   && ex.ConstraintName?.Contains("idempotency", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    throw new DuplicateIdempotencyException();
+                }
+            },
+            cancellationToken,
+            beginLocalTransaction: true);
+
+    public Task<bool> TrySavePartnerResponseAsync(
+        AvailabilityRequestEntity entity,
+        StatusHistoryEntry history,
+        string expectedFromStatus,
+        CancellationToken cancellationToken)
+        => PostgresWork.WriteAsync(
+            PostgresWork.ConnectionString(configuration),
+            async (connection, tx, ct) =>
             {
-                await InsertHistoryAsync(connection, tx, entity.Id, history, cancellationToken);
-            }
+                int updated;
+                await using (var update = new NpgsqlCommand(
+                    """
+                    UPDATE availability.requests
+                    SET status = @status,
+                        partner_viewed_at = @viewedAt,
+                        partner_responded_at = @respondedAt,
+                        final_amount_inr = @finalAmount
+                    WHERE id = @id
+                      AND status = @expected
+                    """,
+                    connection,
+                    tx))
+                {
+                    update.Parameters.AddWithValue("status", entity.Status);
+                    update.Parameters.AddWithValue("viewedAt", (object?)entity.PartnerViewedAt ?? DBNull.Value);
+                    update.Parameters.AddWithValue("respondedAt", (object?)entity.PartnerRespondedAt ?? DBNull.Value);
+                    update.Parameters.AddWithValue("finalAmount", (object?)entity.FinalAmountInr ?? DBNull.Value);
+                    update.Parameters.AddWithValue("id", entity.Id);
+                    update.Parameters.AddWithValue("expected", expectedFromStatus);
+                    updated = await update.ExecuteNonQueryAsync(ct);
+                }
 
-            await tx.CommitAsync(cancellationToken);
-        }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation
-                                           && ex.ConstraintName?.Contains("idempotency", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            await tx.RollbackAsync(cancellationToken);
-            throw new DuplicateIdempotencyException();
-        }
-    }
+                if (updated == 0)
+                {
+                    return false;
+                }
 
-    public async Task SavePartnerResponseAsync(AvailabilityRequestEntity entity, StatusHistoryEntry history, CancellationToken cancellationToken)
-    {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+                if (!string.IsNullOrWhiteSpace(entity.AlternativeJson)
+                    && string.Equals(history.ToStatus, Contracts.Availability.AvailabilityStatuses.AlternativeOffered, StringComparison.Ordinal))
+                {
+                    await using var alt = new NpgsqlCommand(
+                        """
+                        INSERT INTO availability.alternatives (id, request_id, proposal, created_at)
+                        VALUES (@id, @requestId, @proposal, @createdAt)
+                        """,
+                        connection,
+                        tx);
+                    alt.Parameters.AddWithValue("id", Guid.NewGuid());
+                    alt.Parameters.AddWithValue("requestId", entity.Id);
+                    alt.Parameters.Add(new NpgsqlParameter("proposal", NpgsqlDbType.Jsonb) { Value = entity.AlternativeJson });
+                    alt.Parameters.AddWithValue("createdAt", history.OccurredAt);
+                    await alt.ExecuteNonQueryAsync(ct);
+                }
 
-        await using (var update = new NpgsqlCommand(
-            """
-            UPDATE availability.requests
-            SET status = @status,
-                partner_viewed_at = @viewedAt,
-                partner_responded_at = @respondedAt,
-                final_amount_inr = @finalAmount
-            WHERE id = @id
-            """,
-            connection,
-            tx))
-        {
-            update.Parameters.AddWithValue("status", entity.Status);
-            update.Parameters.AddWithValue("viewedAt", (object?)entity.PartnerViewedAt ?? DBNull.Value);
-            update.Parameters.AddWithValue("respondedAt", (object?)entity.PartnerRespondedAt ?? DBNull.Value);
-            update.Parameters.AddWithValue("finalAmount", (object?)entity.FinalAmountInr ?? DBNull.Value);
-            update.Parameters.AddWithValue("id", entity.Id);
-            await update.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        if (!string.IsNullOrWhiteSpace(entity.AlternativeJson)
-            && string.Equals(history.ToStatus, Contracts.Availability.AvailabilityStatuses.AlternativeOffered, StringComparison.Ordinal))
-        {
-            await using var alt = new NpgsqlCommand(
-                """
-                INSERT INTO availability.alternatives (id, request_id, proposal, created_at)
-                VALUES (@id, @requestId, @proposal, @createdAt)
-                """,
-                connection,
-                tx);
-            alt.Parameters.AddWithValue("id", Guid.NewGuid());
-            alt.Parameters.AddWithValue("requestId", entity.Id);
-            alt.Parameters.Add(new NpgsqlParameter("proposal", NpgsqlDbType.Jsonb) { Value = entity.AlternativeJson });
-            alt.Parameters.AddWithValue("createdAt", history.OccurredAt);
-            await alt.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        await InsertHistoryAsync(connection, tx, entity.Id, history, cancellationToken);
-        await tx.CommitAsync(cancellationToken);
-    }
+                await InsertHistoryAsync(connection, tx, entity.Id, history, ct);
+                return true;
+            },
+            cancellationToken,
+            beginLocalTransaction: true);
 
     public async Task AddAdminNoteAsync(Guid requestId, AdminNoteEntry note, CancellationToken cancellationToken)
     {
@@ -136,10 +151,14 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
 
     public async Task<IReadOnlyList<AvailabilityRequestEntity>> ListByStatusesAsync(
         IReadOnlyList<string> statuses,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? retreatSlugs = null)
     {
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        var slugFilter = retreatSlugs is { Count: > 0 }
+            ? "AND r.retreat_slug = ANY(@slugs)"
+            : "";
         await using var command = new NpgsqlCommand(
             $"""
             SELECT {SelectColumns}
@@ -152,10 +171,15 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
                 LIMIT 1
             ) a ON true
             WHERE r.status = ANY(@statuses)
+            {slugFilter}
             ORDER BY r.requested_at ASC
             """,
             connection);
         command.Parameters.AddWithValue("statuses", statuses.ToArray());
+        if (retreatSlugs is { Count: > 0 })
+        {
+            command.Parameters.AddWithValue("slugs", retreatSlugs.ToArray());
+        }
 
         var items = new List<AvailabilityRequestEntity>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -332,7 +356,7 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
 
     private static async Task InsertHistoryAsync(
         NpgsqlConnection connection,
-        NpgsqlTransaction tx,
+        NpgsqlTransaction? tx,
         Guid requestId,
         StatusHistoryEntry history,
         CancellationToken cancellationToken)

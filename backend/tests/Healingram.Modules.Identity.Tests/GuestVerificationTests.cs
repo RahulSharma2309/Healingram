@@ -16,12 +16,12 @@ public class GuestVerificationTests
         var service = CreateService(store);
 
         var start = await service.StartGuestVerificationAsync(
-            new GuestVerifyStartRequest("rahul@local.test", null, "email"),
+            new GuestVerifyStartRequest("rahul@local.test", null, "email", "HR-2026-10001"),
             CancellationToken.None);
         Assert.Equal(AuthStatus.Ok, start.Status);
 
         var verified = await service.VerifyGuestAsync(
-            new GuestVerifyRequest("rahul@local.test", null, GuestVerification.DevCode),
+            new GuestVerifyRequest("rahul@local.test", null, GuestVerification.DevCode, "HR-2026-10001"),
             CancellationToken.None);
 
         Assert.Equal(AuthStatus.Ok, verified.Status);
@@ -41,12 +41,12 @@ public class GuestVerificationTests
         var service = CreateService(store);
 
         var start = await service.StartGuestVerificationAsync(
-            new GuestVerifyStartRequest(null, "9876543210", "phone"),
+            new GuestVerifyStartRequest(null, "9876543210", "phone", "HR-2026-10001"),
             CancellationToken.None);
         Assert.Equal(AuthStatus.Ok, start.Status);
 
         var verified = await service.VerifyGuestAsync(
-            new GuestVerifyRequest(null, "9876543210", GuestVerification.DevCode),
+            new GuestVerifyRequest(null, "9876543210", GuestVerification.DevCode, "HR-2026-10001"),
             CancellationToken.None);
 
         Assert.Equal(AuthStatus.Ok, verified.Status);
@@ -59,12 +59,12 @@ public class GuestVerificationTests
     {
         var service = CreateService(new InMemoryIdentityStore());
         var start = await service.StartGuestVerificationAsync(
-            new GuestVerifyStartRequest("missing@local.test", null, "email"),
+            new GuestVerifyStartRequest("missing@local.test", null, "email", "HR-2026-10001"),
             CancellationToken.None);
         Assert.Equal(AuthStatus.Ok, start.Status);
 
         var verified = await service.VerifyGuestAsync(
-            new GuestVerifyRequest("missing@local.test", null, GuestVerification.DevCode),
+            new GuestVerifyRequest("missing@local.test", null, GuestVerification.DevCode, "HR-2026-10001"),
             CancellationToken.None);
         Assert.Equal(AuthStatus.NoMatch, verified.Status);
         Assert.Null(verified.Tokens);
@@ -81,7 +81,7 @@ public class GuestVerificationTests
             CancellationToken.None);
 
         var result = await CreateService(store).VerifyGuestAsync(
-            new GuestVerifyRequest("rahul@local.test", null, "000000"),
+            new GuestVerifyRequest("rahul@local.test", null, "000000", "HR-2026-10001"),
             CancellationToken.None);
 
         Assert.Equal(AuthStatus.Validation, result.Status);

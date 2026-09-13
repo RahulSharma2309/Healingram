@@ -1,5 +1,5 @@
 import { mergeWishlistOnLogin } from "../wishlist";
-import { ApiError, apiFetch, getRefreshToken, setAccessToken, setRefreshToken } from "./client";
+import { ApiError, apiErrorMessage, apiFetch, getRefreshToken, setAccessToken, setRefreshToken } from "./client";
 
 export type PartnerMembership = {
   partnerId: string;
@@ -53,10 +53,11 @@ export async function loginWithPassword(
   email: string,
   password: string,
   persist = true,
+  portal?: "customer" | "vendor" | "admin",
 ): Promise<TokenResponse> {
   const tokens = await apiFetch<TokenResponse>("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, portal }),
   });
   if (persist) {
     await persistAuthenticatedSession(tokens);
@@ -159,6 +160,8 @@ export function authErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) {
       if (error.message === "No request found for that email or mobile") return error.message;
+      if (error.message === "This account is not an admin.") return error.message;
+      if (error.message === "This account is not a retreat partner.") return error.message;
       return "Email or password is not right.";
     }
     if (error.status === 409) return "That email is already registered.";
@@ -167,9 +170,10 @@ export function authErrorMessage(error: unknown): string {
       if (details.length > 0) return details.join(". ");
       return error.message || "Check the form and try again.";
     }
+    if (error.status === 429) return apiErrorMessage(error);
     return error.message;
   }
-  return "Cannot reach the server. Is the gateway running on port 5000?";
+  return apiErrorMessage(error);
 }
 
 function validationDetails(body: unknown): string[] {

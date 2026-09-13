@@ -5,8 +5,21 @@ namespace Healingram.Modules.Payment.Application;
 
 internal static class PaymentStatuses
 {
+    public const string Creating = "creating";
     public const string Ready = "ready";
     public const string Paid = "paid";
+    public const string Failed = "failed";
+
+    public static bool IsOpen(string status)
+        => status is Creating or Ready;
+}
+
+internal static class PaymentWebhookStatuses
+{
+    public const string Received = "received";
+    public const string Processing = "processing";
+    public const string Processed = "processed";
+    public const string Failed = "failed";
 }
 
 internal static class PaymentWebhookHeaders
@@ -107,3 +120,5 @@ internal sealed record PaymentOutcome(
 }
 
 internal sealed class DuplicatePaymentIdempotencyException : Exception;
+
+internal sealed class DuplicateOpenPaymentException : Exception;

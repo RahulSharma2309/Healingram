@@ -5,6 +5,7 @@
  */
 
 import type { SettlementMode } from "../data/programmePricing";
+import { ApiError, apiErrorMessage } from "./api/client";
 import {
   getPaymentIntentById,
   postAdminSimulatePayment,
@@ -85,33 +86,27 @@ export async function createPaymentIntent(
   requestId: string,
 ): Promise<PaymentIntent | { error: string }> {
   const request = getAvailabilityRequest(requestId);
-  if (!request) return { error: "Request not found" };
-  if (request.status !== "PAYMENT_PENDING") {
-    return { error: "Request is not payment-ready" };
-  }
-  if (request.finalPayableAmount == null || request.finalPayableAmount <= 0) {
-    return { error: "Final payable amount not confirmed" };
-  }
-
   try {
     const server = await postPaymentIntent(requestId, idempotencyKeyFor(requestId));
     rememberIntentId(requestId, server.id);
     const intent: PaymentIntent = {
       requestId,
       serverIntentId: server.id,
-      amount: request.finalPayableAmount,
+      amount: request?.finalPayableAmount ?? 0,
       currency: "INR",
-      settlementMode: request.settlementMode,
+      settlementMode: request?.settlementMode ?? "MARKETPLACE_SPLIT",
       status: "ready",
       provider: "fake",
       createdAt: new Date().toISOString(),
     };
     persistLocalIntent(intent);
     return intent;
-  } catch {
+  } catch (error) {
     return {
       error:
-        "Could not create a payment intent on the server. Confirm availability as a partner first, then try again. No payment was taken.",
+        error instanceof ApiError
+          ? apiErrorMessage(error)
+          : "Could not create a payment intent on the server. Confirm availability as a partner first, then try again. No payment was taken.",
     };
   }
 }

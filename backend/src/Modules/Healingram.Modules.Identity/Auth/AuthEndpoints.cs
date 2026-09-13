@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Healingram.Contracts.Identity;
+using Healingram.Contracts.Otp;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -15,10 +17,10 @@ internal static class AuthEndpoints
         var auth = app.MapGroup("/api/auth").WithTags("Auth");
         auth.MapPost("/register", (RegisterRequest body, AuthService service, CancellationToken ct)
             => Handle(() => service.RegisterAsync(body, ct)))
-            .RequireRateLimiting("sensitive");
+            .RequireRateLimiting("auth-register");
         auth.MapPost("/login", (LoginRequest body, AuthService service, CancellationToken ct)
             => Handle(() => service.LoginAsync(body, ct)))
-            .RequireRateLimiting("sensitive");
+            .RequireRateLimiting("auth-login");
         auth.MapPost("/refresh", (RefreshRequest body, AuthService service, CancellationToken ct)
             => Handle(() => service.RefreshAsync(body, ct)))
             .RequireRateLimiting("sensitive");
@@ -26,10 +28,10 @@ internal static class AuthEndpoints
             => Handle(() => service.LogoutAsync(body ?? new LogoutRequest(null), ct)));
         auth.MapPost("/guest/verify-start", (GuestVerifyStartRequest body, AuthService service, CancellationToken ct)
             => Handle(() => service.StartGuestVerificationAsync(body, ct)))
-            .RequireRateLimiting("sensitive");
+            .RequireRateLimiting("otp-send");
         auth.MapPost("/guest/verify", (GuestVerifyRequest body, AuthService service, CancellationToken ct)
             => Handle(() => service.VerifyGuestAsync(body, ct)))
-            .RequireRateLimiting("sensitive");
+            .RequireRateLimiting("otp-verify");
 
         app.MapGet("/api/users/me", async (ClaimsPrincipal principal, AuthService service, CancellationToken ct) =>
         {
@@ -50,6 +52,21 @@ internal static class AuthEndpoints
             if (!TryGetUserId(principal, out var userId))
             {
                 return AuthHttp.Unauthorized("Unauthorized");
+            }
+
+            if (string.Equals(
+                    RoleAuthorization.GetAuthKind(principal),
+                    AuthKinds.GuestRequest,
+                    StringComparison.OrdinalIgnoreCase)
+                || string.Equals(
+                    RoleAuthorization.GetPurpose(principal),
+                    OtpPurposes.RequestAccess,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Json(
+                    new { error = "Forbidden", details = new[] { "Guest request tokens cannot change a profile" } },
+                    Json,
+                    statusCode: StatusCodes.Status403Forbidden);
             }
 
             return AuthHttp.From(await service.UpdateProfileAsync(userId, body, ct));

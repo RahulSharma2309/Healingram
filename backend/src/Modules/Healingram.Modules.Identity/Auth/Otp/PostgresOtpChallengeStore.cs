@@ -150,6 +150,27 @@ internal sealed class PostgresOtpChallengeStore(IConfiguration configuration) : 
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
+    public async Task<int> CountCreatedSinceAsync(
+        string destination,
+        DateTimeOffset since,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT COUNT(*)
+            FROM identity.otp_challenges
+            WHERE destination = @destination
+              AND created_at > @since
+            """,
+            connection);
+        command.Parameters.AddWithValue("destination", destination);
+        command.Parameters.AddWithValue("since", since);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(value);
+    }
+
     private NpgsqlConnection Open()
     {
         var connectionString = configuration.GetConnectionString("Postgres")

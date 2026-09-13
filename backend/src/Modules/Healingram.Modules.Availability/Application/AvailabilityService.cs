@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Healingram.BuildingBlocks.Notifications;
+using Healingram.BuildingBlocks.Persistence;
+using Healingram.Contracts.Audit;
 using Healingram.Contracts.Availability;
 using Healingram.Contracts.Booking;
 using Healingram.Contracts.Catalog;
@@ -21,7 +23,9 @@ internal sealed class AvailabilityService(
     IGuestIdentityPort guests,
     TimeProvider clock,
     ILogger<AvailabilityService> logger,
-    INotificationOutbox? outbox = null)
+    INotificationOutbox? outbox = null,
+    IUnitOfWork? unitOfWork = null,
+    IAuditPort? audit = null)
 {
     public async Task<AvailabilityOutcome> CreateAsync(
         CreateAvailabilityRequest request,
@@ -29,6 +33,11 @@ internal sealed class AvailabilityService(
         CancellationToken cancellationToken)
     {
         using var activity = AvailabilityTelemetry.Source.StartActivity("availability.create");
+
+        if (actor.IsGuestRequest)
+        {
+            return AvailabilityOutcome.Deny("Guest request tokens cannot create another request");
+        }
 
         var details = StayRules.Validate(
             request.IdempotencyKey,
@@ -107,7 +116,17 @@ internal sealed class AvailabilityService(
 
         try
         {
-            await store.InsertAsync(entity, cancellationToken);
+            await InWork(
+                async () =>
+                {
+                    await store.InsertAsync(entity, cancellationToken);
+                    await EnqueueRequired(
+                        NotificationKinds.AvailabilityRequested,
+                        $"availability-requested:{entity.PublicId}",
+                        new { publicId = entity.PublicId },
+                        cancellationToken);
+                },
+                cancellationToken);
         }
         catch (DuplicateIdempotencyException)
         {
@@ -124,11 +143,7 @@ internal sealed class AvailabilityService(
 
         activity?.SetTag("availability.public_id", entity.PublicId);
         logger.LogInformation("Availability request {PublicId} created", entity.PublicId);
-        await EnqueueSafe(
-            NotificationKinds.AvailabilityRequested,
-            $"availability-requested:{entity.PublicId}",
-            new { publicId = entity.PublicId },
-            cancellationToken);
+        await WriteAuditAsync("availability.requested", "availability_request", entity.PublicId, actor, cancellationToken);
         return AvailabilityOutcome.Created(entity);
     }
 
@@ -174,8 +189,16 @@ internal sealed class AvailabilityService(
                        cancellationToken);
         }
 
-        if (!string.IsNullOrWhiteSpace(actor.ScopedRequestId)
-            && !string.Equals(actor.ScopedRequestId, entity.PublicId, StringComparison.OrdinalIgnoreCase))
+        if (actor.IsGuestRequest)
+        {
+            if (string.IsNullOrWhiteSpace(actor.ScopedRequestId)
+                || !string.Equals(actor.ScopedRequestId, entity.PublicId, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(actor.ScopedRequestId)
+                 && !string.Equals(actor.ScopedRequestId, entity.PublicId, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -294,6 +317,7 @@ internal sealed class AvailabilityService(
         await store.AddAdminNoteAsync(entity.Id, entry, cancellationToken);
         entity.InternalNotes.Add(entry);
         logger.LogInformation("Admin note added on {PublicId}", entity.PublicId);
+        await WriteAuditAsync("availability.admin_note", "availability_request", entity.PublicId, actor, cancellationToken);
         return AvailabilityOutcome.Ok(entity);
     }
 
@@ -316,12 +340,10 @@ internal sealed class AvailabilityService(
             }
         }
 
-        var items = await store.ListByStatusesAsync([AvailabilityStatuses.Requested], cancellationToken);
-        if (allowedSlugs is not null)
-        {
-            var allowed = allowedSlugs.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            items = items.Where(i => allowed.Contains(i.RetreatSlug)).ToArray();
-        }
+        var items = await store.ListByStatusesAsync(
+            [AvailabilityStatuses.Requested],
+            cancellationToken,
+            allowedSlugs);
 
         var unseen = items.Where(i => i.PartnerViewedAt is null).Select(i => i.Id).ToArray();
         if (unseen.Length > 0)
@@ -466,6 +488,14 @@ internal sealed class AvailabilityService(
                 : AvailabilityOutcome.Deny("Not your request");
         }
 
+        if (createBooking
+            && string.Equals(entity.Status, AvailabilityStatuses.Confirmed, StringComparison.Ordinal)
+            && (action == AvailabilityActions.Confirm || action == AvailabilityActions.AcceptAlternative))
+        {
+            await EnsureBookingAsync(entity, entity.FinalAmountInr, cancellationToken);
+            return AvailabilityOutcome.Replayed(entity);
+        }
+
         var snapshotBefore = entity.SnapshotJson;
         var reject = StatusMachine.RejectReason(entity.Status, toStatus, action);
         if (reject is not null)
@@ -478,29 +508,19 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Illegal("No alternative to accept");
         }
 
-        if (createBooking)
+        var amount = finalAmountInr ?? entity.FinalAmountInr ?? TryAmountJson(entity.AlternativeJson);
+        if (createBooking && amount is null or <= 0)
         {
-            var amount = finalAmountInr ?? entity.FinalAmountInr ?? TryAmountJson(entity.AlternativeJson);
-            using var bookingSpan = AvailabilityTelemetry.Source.StartActivity("availability.create_booking");
-            bookingSpan?.SetTag("availability.public_id", entity.PublicId);
-            await bookings.CreateAwaitingPaymentAsync(
-                new CreateAwaitingPaymentBooking(
-                    entity.Id,
-                    entity.PublicId,
-                    entity.SnapshotJson,
-                    amount,
-                    entity.CustomerUserId),
-                cancellationToken);
-            finalAmountInr = amount;
+            return AvailabilityOutcome.Invalid("final amount is required");
         }
 
         var now = clock.GetUtcNow();
         var from = entity.Status;
         entity.Status = toStatus;
         entity.PartnerRespondedAt = requirePartnerWrite ? now : entity.PartnerRespondedAt;
-        if (finalAmountInr is not null)
+        if (amount is not null)
         {
-            entity.FinalAmountInr = finalAmountInr;
+            entity.FinalAmountInr = amount;
         }
 
         if (alternativeJson is not null)
@@ -522,40 +542,114 @@ internal sealed class AvailabilityService(
             reason,
             now);
         entity.History.Add(history);
-        await store.SavePartnerResponseAsync(entity, history, cancellationToken);
+
+        var saved = false;
+        await InWork(
+            async () =>
+            {
+                saved = await store.TrySavePartnerResponseAsync(entity, history, from, cancellationToken);
+                if (!saved)
+                {
+                    return;
+                }
+
+                if (createBooking)
+                {
+                    await EnsureBookingAsync(entity, amount, cancellationToken);
+                }
+
+                if (string.Equals(toStatus, AvailabilityStatuses.Confirmed, StringComparison.Ordinal))
+                {
+                    await EnqueueRequired(
+                        NotificationKinds.AvailabilityConfirmed,
+                        $"availability-confirmed:{entity.PublicId}",
+                        new { publicId = entity.PublicId },
+                        cancellationToken);
+                }
+            },
+            cancellationToken);
+
+        if (!saved)
+        {
+            return AvailabilityOutcome.Stale("This request was already updated");
+        }
 
         logger.LogInformation(
             "Availability request {PublicId} transitioned {From} -> {To}",
             entity.PublicId,
             from,
             toStatus);
-
-        if (string.Equals(toStatus, AvailabilityStatuses.Confirmed, StringComparison.Ordinal))
-        {
-            await EnqueueSafe(
-                NotificationKinds.AvailabilityConfirmed,
-                $"availability-confirmed:{entity.PublicId}",
-                new { publicId = entity.PublicId },
-                cancellationToken);
-        }
-
+        await WriteAuditAsync($"availability.{action}", "availability_request", entity.PublicId, actor, cancellationToken);
         return AvailabilityOutcome.Ok(entity);
     }
 
-    private async Task EnqueueSafe(string kind, string key, object payload, CancellationToken cancellationToken)
+    private Task EnsureBookingAsync(
+        AvailabilityRequestEntity entity,
+        decimal? amount,
+        CancellationToken cancellationToken)
+    {
+        using var bookingSpan = AvailabilityTelemetry.Source.StartActivity("availability.create_booking");
+        bookingSpan?.SetTag("availability.public_id", entity.PublicId);
+        return bookings.CreateAwaitingPaymentAsync(
+            new CreateAwaitingPaymentBooking(
+                entity.Id,
+                entity.PublicId,
+                entity.SnapshotJson,
+                amount,
+                entity.CustomerUserId),
+            cancellationToken);
+    }
+
+    private async Task InWork(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (unitOfWork is null)
+        {
+            await action();
+            return;
+        }
+
+        await using var scope = await unitOfWork.BeginAsync(cancellationToken);
+        await action();
+        await scope.CommitAsync(cancellationToken);
+    }
+
+    private async Task EnqueueRequired(string kind, string key, object payload, CancellationToken cancellationToken)
     {
         if (outbox is null)
         {
             return;
         }
 
+        await outbox.EnqueueAsync(kind, key, payload, cancellationToken);
+    }
+
+    private async Task WriteAuditAsync(
+        string action,
+        string entityType,
+        string? entityId,
+        Actor actor,
+        CancellationToken cancellationToken)
+    {
+        if (audit is null)
+        {
+            return;
+        }
+
         try
         {
-            await outbox.EnqueueAsync(kind, key, payload, cancellationToken);
+            await audit.WriteAsync(
+                new AuditEvent(
+                    action,
+                    entityType,
+                    entityId,
+                    actor.UserId,
+                    actor.Role,
+                    Activity.Current?.Id),
+                cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Outbox enqueue skipped for {Kind}", kind);
+            logger.LogWarning(ex, "Audit write skipped for {Action}", action);
         }
     }
 
