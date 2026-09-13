@@ -52,7 +52,8 @@ internal sealed record AuthUserResponse(
     string? PhoneCountryCode = null,
     string? AccountStatus = null,
     IReadOnlyList<string>? Roles = null,
-    IReadOnlyList<PartnerMembershipDto>? PartnerMemberships = null);
+    IReadOnlyList<PartnerMembershipDto>? PartnerMemberships = null,
+    string? AuthKind = null);
 
 internal sealed record PartnerMembershipDto(Guid PartnerId, string PartnerName, string Role, string Status);
 internal sealed record TokenResponse(string AccessToken, string RefreshToken, AuthUserResponse User);

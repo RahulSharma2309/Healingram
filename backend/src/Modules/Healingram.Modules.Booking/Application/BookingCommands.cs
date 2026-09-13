@@ -67,13 +67,31 @@ internal static class BookingSnapshot
             ["requestPublicId"] = command.PublicId,
             ["requestId"] = command.RequestId.ToString(),
             ["priceSnapshot"] = price.DeepClone(),
+            ["retreat"] = price["retreatSlug"]?.GetValue<string>(),
+            ["programme"] = price["programmeSlug"]?.GetValue<string>(),
+            ["room"] = price["roomType"]?.GetValue<string>() ?? price["occupancy"]?.GetValue<string>(),
+            ["dates"] = price["checkIn"]?.GetValue<string>(),
+            ["guests"] = price["guests"]?.DeepClone(),
+            ["occupancy"] = price["occupancy"]?.GetValue<string>(),
+            ["currency"] = price["currency"]?.GetValue<string>() ?? "INR",
+            ["basePrice"] = price["baseAmount"]?.DeepClone(),
+            ["taxes"] = price["taxAmount"]?.DeepClone(),
+            ["discounts"] = 0,
+            ["platformFees"] = 0,
+            ["vendorAmount"] = command.FinalAmountInr is { } vendor
+                ? JsonValue.Create(vendor)
+                : price["totalAmount"]?.DeepClone(),
+            ["finalTotal"] = command.FinalAmountInr is { } total
+                ? JsonValue.Create(total)
+                : price["totalAmount"]?.DeepClone(),
+            ["pricingVersion"] = price["pricingVersion"]?.GetValue<string>() ?? "1",
+            ["requestReference"] = command.PublicId,
             ["finalAmountInr"] = command.FinalAmountInr is { } amount
                 ? JsonValue.Create(amount)
                 : null,
             ["customerUserId"] = command.CustomerUserId is { } customer
                 ? customer.ToString()
-                : null,
-            ["currency"] = "INR"
+                : null
         };
         return wrapper.ToJsonString(Json);
     }

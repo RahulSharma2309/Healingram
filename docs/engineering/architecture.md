@@ -38,10 +38,12 @@ Configurable hosts: `App:CustomerUrl`, `App:VendorUrl`, `App:AdminUrl` (frontend
 
 Gateway = routing, CORS, correlation. API = authentication, authorization, rate limit.
 
-## Demo vs live UI
+## Canonical surfaces
 
-- `src/` — the real app (talks to the gateway).
-- `ui-reference/` — old clickable demo. Do not treat its mock prices as launch fact. Delete it when you no longer need the snapshot.
+- `src/` — the real React app (presentation only; talks to the gateway).
+- `backend/` — the modular monolith.
+- PostgreSQL — the only business source of truth.
+- `ui-reference` — removed from this branch. It was a UX snapshot, not the product.
 
 ## Hard runtime rules
 

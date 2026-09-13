@@ -8,10 +8,8 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
-import {
-  HERO_DISCOVERY_OPTIONS,
-  type HeroDiscoveryOption,
-} from "../data/launchSupply";
+import { fetchMatchOptions } from "../lib/api/matching";
+import type { HeroDiscoveryOption } from "../lib/catalogTypes";
 
 /** Placeholder results route — filter state via query until results page is rebuilt */
 const RESULTS_PATH = "/retreats";
@@ -27,10 +25,33 @@ export function HeroDiscovery() {
   const [selected, setSelected] = useState<HeroDiscoveryOption | null>(null);
   const [highlight, setHighlight] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [options, setOptions] = useState<HeroDiscoveryOption[]>([]);
 
   const close = useCallback(() => {
     setOpen(false);
     setHighlight(0);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMatchOptions()
+      .then((questions) => {
+        if (cancelled) return;
+        const q1 = questions.find((q) => q.key === "q1") ?? questions[0];
+        setOptions(
+          (q1?.options ?? []).map((opt) => ({
+            id: opt.key,
+            label: opt.label,
+            programme: opt.key === "real-break" ? null : opt.key,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -70,7 +91,7 @@ export function HeroDiscovery() {
         selected
           ? Math.max(
               0,
-              HERO_DISCOVERY_OPTIONS.findIndex((o) => o.id === selected.id),
+              options.findIndex((o) => o.id === selected.id),
             )
           : 0,
       );
@@ -78,7 +99,7 @@ export function HeroDiscovery() {
   };
 
   const onListKeyDown = (e: ReactKeyboardEvent<HTMLUListElement>) => {
-    const last = HERO_DISCOVERY_OPTIONS.length - 1;
+    const last = options.length - 1;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlight((i) => (i >= last ? 0 : i + 1));
@@ -93,7 +114,7 @@ export function HeroDiscovery() {
       setHighlight(last);
     } else if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      pick(HERO_DISCOVERY_OPTIONS[highlight]);
+      if (options[highlight]) pick(options[highlight]);
     } else if (e.key === "Escape") {
       e.preventDefault();
       close();
@@ -184,7 +205,7 @@ export function HeroDiscovery() {
               }}
               className="absolute z-20 mt-2 w-full max-h-64 overflow-y-auto rounded-xl border border-sand-200 bg-white py-1.5 shadow-lg focus:outline-none"
             >
-              {HERO_DISCOVERY_OPTIONS.map((option, index) => {
+              {options.map((option, index) => {
                 const isSelected = selected?.id === option.id;
                 const isActive = highlight === index;
                 return (

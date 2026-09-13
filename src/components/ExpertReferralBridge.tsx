@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { getProgrammePricing } from "../data/programmePricing";
 import { saveExpertReferralContext } from "../lib/expertLeads";
 import { useListingPlanOptional } from "../lib/listingPlanContext";
 import { addNights } from "../lib/pricing";
@@ -16,17 +15,9 @@ export function ExpertReferralBridge({
 
   useEffect(() => {
     if (!plan) return;
-    const row = plan.programmeId
-      ? getProgrammePricing(retreatId, plan.programmeId)
-      : null;
-    const programmeName = row?.programmeName;
+    const programmeName = plan.programmeId || undefined;
     let checkOut = plan.flexibleCheckOut || undefined;
-    if (
-      plan.checkIn &&
-      plan.durationNights &&
-      row &&
-      row.durationMode !== "flexible"
-    ) {
+    if (plan.checkIn && plan.durationNights && !plan.flexibleCheckOut) {
       checkOut = addNights(plan.checkIn, plan.durationNights);
     }
 

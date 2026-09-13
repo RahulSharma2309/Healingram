@@ -94,6 +94,8 @@ function Assert-Code([string]$Id, [string]$Raw, [int[]]$Ok) {
 # --- Flow 01 catalog ---
 $needs = Invoke-Get "/api/catalog/needs"
 Assert-Code "TC-01-needs" $needs @(200)
+$discovery = Invoke-Get "/api/catalog/discovery"
+Assert-Code "TC-01-discovery" $discovery @(200)
 $places = Invoke-Get "/api/catalog/places"
 Assert-Code "TC-01-places" $places @(200)
 $retreats = Invoke-Get "/api/catalog/retreats"
@@ -130,6 +132,8 @@ Assert-Code "TC-02-admin" $adminLogin @(200)
 $adminToken = [string](Get-Json $adminLogin).accessToken
 
 # --- Flow 03 matching ---
+$options = Invoke-Get "/api/matching/options"
+Assert-Code "TC-03-options" $options @(200)
 $matchBody = '{"answers":{"q1":["calm-mind"],"q2":["yoga-meditation"],"q3":"few-days","q4":["anywhere"]}}'
 $match = Invoke-Post "/api/matching/sessions" $matchBody
 Assert-Code "TC-03-match" $match @(200, 201)
@@ -143,10 +147,12 @@ $reqBody = @"
 $created = Invoke-Post "/api/availability/requests" $reqBody $guestToken
 Assert-Code "TC-04-create" $created @(201, 200)
 $publicId = [string](Get-Json $created).publicId
-$got = Invoke-Get "/api/availability/requests/$publicId"
+$got = Invoke-Get "/api/availability/requests/$publicId" $guestToken
 Assert-Code "TC-04-get" $got @(200)
-$earlyPay = Invoke-Post "/api/payment/intents" (@{ publicId = $publicId; idempotencyKey = [guid]::NewGuid().ToString() } | ConvertTo-Json -Compress)
-Assert-Code "TC-06-too-early" $earlyPay @(400, 404)
+$anon = Invoke-Get "/api/availability/requests/$publicId"
+Assert-Code "TC-04-anonymous-blocked" $anon @(401)
+$earlyPay = Invoke-Post "/api/payment/intents" (@{ publicId = $publicId; idempotencyKey = [guid]::NewGuid().ToString() } | ConvertTo-Json -Compress) $guestToken
+Assert-Code "TC-06-too-early" $earlyPay @(400, 404, 409, 422)
 
 # --- Flow 05 confirm ---
 $confirm = Invoke-Post "/api/availability/requests/$publicId/confirm" '{"finalAmountInr":45000}' $partnerToken
@@ -158,17 +164,21 @@ Assert-Code "TC-05-confirm" $confirm @(200)
 
 # --- Flow 06 payment ---
 $payKey = [guid]::NewGuid().ToString()
-$intent = Invoke-Post "/api/payment/intents" (@{ publicId = $publicId; idempotencyKey = $payKey } | ConvertTo-Json -Compress)
+$intent = Invoke-Post "/api/payment/intents" (@{ publicId = $publicId; idempotencyKey = $payKey } | ConvertTo-Json -Compress) $guestToken
 Assert-Code "TC-06-intent" $intent @(201, 200)
 $intentId = [string](Get-Json $intent).id
-$read = Invoke-Get "/api/payment/intents/$intentId"
+$read = Invoke-Get "/api/payment/intents/$intentId" $guestToken
 Assert-Code "TC-06-get" $read @(200)
+$intentObj = Get-Json $read
+$amount = $intentObj.amountInr
+if (-not $amount) { $amount = 45000 }
 $eventId = [guid]::NewGuid().ToString()
-$hook = Invoke-Post "/api/payment/webhooks/fake" (@{ intentId = $intentId; providerEventId = $eventId } | ConvertTo-Json -Compress) "" @{ "X-Webhook-Secret" = "local-dev-webhook-secret" }
+$hookBody = (@{ intentId = $intentId; providerEventId = $eventId; amountInr = $amount; currency = "INR" } | ConvertTo-Json -Compress)
+$hook = Invoke-Post "/api/payment/webhooks/fake" $hookBody "" @{ "X-Webhook-Secret" = "local-dev-webhook-secret" }
 Assert-Code "TC-06-webhook" $hook @(200)
-$hook2 = Invoke-Post "/api/payment/webhooks/fake" (@{ intentId = $intentId; providerEventId = $eventId } | ConvertTo-Json -Compress) "" @{ "X-Webhook-Secret" = "local-dev-webhook-secret" }
+$hook2 = Invoke-Post "/api/payment/webhooks/fake" $hookBody "" @{ "X-Webhook-Secret" = "local-dev-webhook-secret" }
 Assert-Code "TC-06-webhook-idemp" $hook2 @(200)
-$badHook = Invoke-Post "/api/payment/webhooks/fake" (@{ intentId = $intentId; providerEventId = [guid]::NewGuid().ToString() } | ConvertTo-Json -Compress)
+$badHook = Invoke-Post "/api/payment/webhooks/fake" (@{ intentId = $intentId; providerEventId = [guid]::NewGuid().ToString(); amountInr = $amount; currency = "INR" } | ConvertTo-Json -Compress)
 Assert-Code "TC-06-webhook-nosecret" $badHook @(401)
 
 # --- Flow 07 trips / wishlist ---

@@ -4,9 +4,13 @@
 
 | Method | Path | Auth |
 | --- | --- | --- |
+| GET | `/api/admin/overview` | Admin · counts from real tables |
 | GET | `/api/admin/availability` | AdminWrite |
 | POST | `/api/admin/availability/{publicId}/note` | AdminWrite · `{ note }` |
+| GET | `/api/admin/leads` | Admin · read-only |
 | GET | `/api/leads/{id}` | AdminWrite |
+| GET | `/api/notifications` | Bearer · that user’s inbox |
+| POST | `/api/notifications/{id}/read` | Bearer |
 
 Partner token on admin routes → `403`.  
 Admin token **can** call partner confirm (same `PartnerWrite` policy).

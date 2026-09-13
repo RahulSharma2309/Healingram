@@ -13,12 +13,11 @@ import {
   getNeedOptionsWithCounts,
   parseBrowseStateFromParams,
   priceSortAvailable,
-  programmesForNeeds,
   sortBrowseRetreats,
   type AllRetreatsBrowseState,
   type AllRetreatsSortId,
   type DurationBandId,
-} from "../../data/allRetreatsBrowse";
+} from "../../lib/browse";
 
 /**
  * `/retreats` — published catalog from the gateway. Empty if the API is down.
@@ -27,7 +26,7 @@ export function RetreatList() {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseBrowseStateFromParams(params), [params]);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { retreats: inventory, places, source } = usePublishedRetreats();
+  const { retreats: inventory, places, needs, needThemeMap, source } = usePublishedRetreats();
 
   const setState = (patch: Partial<AllRetreatsBrowseState>) => {
     const next: AllRetreatsBrowseState = { ...state, ...patch };
@@ -59,8 +58,14 @@ export function RetreatList() {
   };
 
   const needOptions = useMemo(
-    () => getNeedOptionsWithCounts(state, inventory),
-    [state, inventory],
+    () =>
+      getNeedOptionsWithCounts(
+        state,
+        inventory,
+        needs.map((need) => ({ id: need.slug, label: need.label })),
+        needThemeMap,
+      ),
+    [state, inventory, needs, needThemeMap],
   );
   const locationGroups = useMemo(() => {
     if (source === "api" && places.length > 0) {
@@ -85,14 +90,12 @@ export function RetreatList() {
         ],
       }));
     }
-    return getLocationOptionsWithCounts(state, inventory);
-  }, [source, places, state, inventory]);
+    return getLocationOptionsWithCounts(state, inventory, needThemeMap);
+  }, [source, places, state, inventory, needThemeMap]);
   const durationOptions = useMemo(
-    () => getDurationOptionsWithCounts(state, inventory),
-    [state, inventory],
+    () => getDurationOptionsWithCounts(state, inventory, needThemeMap),
+    [state, inventory, needThemeMap],
   );
-
-  const programmes = useMemo(() => programmesForNeeds(state.needs), [state.needs]);
 
   const results = useMemo(() => {
     const filtered = filterBrowseRetreats(
@@ -102,11 +105,19 @@ export function RetreatList() {
         durations: state.durations,
       },
       inventory,
+      needThemeMap,
     );
-    return sortBrowseRetreats(filtered, state.sort, programmes.length ? programmes : null);
-  }, [state, programmes, inventory]);
+    return sortBrowseRetreats(filtered, state.sort);
+  }, [state, inventory, needThemeMap]);
 
-  const chips = useMemo(() => activeFilterChips(state), [state]);
+  const chips = useMemo(
+    () =>
+      activeFilterChips(
+        state,
+        Object.fromEntries(needs.map((need) => [need.slug, need.label])),
+      ),
+    [state, needs],
+  );
   const activeCount = countActiveFilters(state);
   const canPriceSort = priceSortAvailable(results);
 

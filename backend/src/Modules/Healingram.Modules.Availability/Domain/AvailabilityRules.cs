@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healingram.Contracts.Availability;
+using Healingram.Contracts.Catalog;
 
 namespace Healingram.Modules.Availability.Domain;
 
@@ -236,9 +237,31 @@ internal static class PriceSnapshotFactory
             ["currency"] = "INR",
             ["label"] = "Price on request",
             ["capturedAt"] = capturedAt.ToUniversalTime().ToString("O"),
-            ["roomType"] = stay.Occupancy
+            ["roomType"] = stay.Occupancy,
+            ["pricingVersion"] = "1"
         };
 
+        return node.ToJsonString(AvailabilityJson.Options);
+    }
+
+    public static string FromQuote(CatalogQuote quote, ValidatedStay stay, DateTimeOffset capturedAt)
+    {
+        var node = JsonNode.Parse(quote.SnapshotJson) as JsonObject ?? [];
+        node["retreatSlug"] = stay.RetreatSlug;
+        node["programmeSlug"] = stay.ProgrammeSlug;
+        node["checkIn"] = stay.CheckIn;
+        node["durationNights"] = stay.DurationNights;
+        node["occupancy"] = stay.Occupancy;
+        node["guests"] = stay.Guests;
+        node["quoteId"] = quote.Id.ToString();
+        node["pricingVersion"] = quote.PricingVersion;
+        node["currency"] = quote.Currency;
+        node["priceStatus"] = quote.PriceStatus;
+        node["baseAmount"] = quote.BaseAmount is { } baseAmount ? JsonValue.Create(baseAmount) : null;
+        node["taxAmount"] = quote.TaxAmount is { } tax ? JsonValue.Create(tax) : null;
+        node["totalAmount"] = quote.TotalAmount is { } total ? JsonValue.Create(total) : null;
+        node["capturedAt"] = capturedAt.ToUniversalTime().ToString("O");
+        node["roomType"] = stay.Occupancy;
         return node.ToJsonString(AvailabilityJson.Options);
     }
 }

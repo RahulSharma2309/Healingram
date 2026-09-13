@@ -5,13 +5,7 @@ import {
   type FindMyMatchListingState,
 } from "../../components/retreat/RetreatListingComponent1";
 import { RetreatListingComponent2 } from "../../components/retreat/RetreatListingComponent2";
-import { RetreatListingComponent3 } from "../../components/retreat/RetreatListingComponent3";
-import { RetreatListingComponent4 } from "../../components/retreat/RetreatListingComponent4";
-import { RetreatListingComponent5 } from "../../components/retreat/RetreatListingComponent5";
-import { RetreatListingComponent6 } from "../../components/retreat/RetreatListingComponent6";
-import { RetreatListingComponent7 } from "../../components/retreat/RetreatListingComponent7";
-import { RetreatListingComponent8 } from "../../components/retreat/RetreatListingComponent8";
-import { type RetreatListingView } from "../../data/launchListing";
+import { type RetreatListingView } from "../../lib/listingTypes";
 import { ExpertReferralBridge } from "../../components/ExpertReferralBridge";
 import { ListingPlanProvider } from "../../lib/listingPlanContext";
 import { fetchRetreatListing, type RetreatListing } from "../../lib/api/catalog";
@@ -20,9 +14,7 @@ import {
   excludedLabels,
   hasSectionItems,
   includedLabels,
-  isLocalLaunchSlug,
   mapRetreatListingToView,
-  shouldUseLocalOptionalSection,
 } from "../../lib/api/listing";
 
 type PageStatus = "loading" | "ready" | "unpublished" | "missing" | "error";
@@ -31,14 +23,14 @@ type PageState = {
   status: PageStatus;
   listing: RetreatListingView | null;
   dto: RetreatListing | null;
-  source: "api" | "local" | null;
+  source: "api" | null;
 };
 
 const INITIAL: PageState = { status: "loading", listing: null, dto: null, source: null };
 
 /**
  * Retreat listing page.
- * Prefers GET /api/catalog/retreats/{slug}. Local launch extras only when the API omitted them.
+ * Renders GET /api/catalog/retreats/{slug}. Empty API sections stay empty.
  */
 export function RetreatDetail() {
   const { id } = useParams();
@@ -123,28 +115,11 @@ export function RetreatDetail() {
   const listing = page.listing;
   const dto = page.dto;
   const retreatId = listing.retreat.id;
-  const localSlug = isLocalLaunchSlug(id);
-  const fromApi = page.source === "api";
-
-  const showLocalExperts = !fromApi
-    ? localSlug
-    : shouldUseLocalOptionalSection(id, dto?.experts);
-  const showLocalTestimonials = !fromApi
-    ? localSlug
-    : shouldUseLocalOptionalSection(id, dto?.testimonials);
-  const showLocalRooms = !fromApi
-    ? localSlug
-    : shouldUseLocalOptionalSection(id, dto?.rooms);
-  const showLocalInclusions = !fromApi
-    ? localSlug
-    : shouldUseLocalOptionalSection(id, dto?.inclusions);
-
-  const apiExperts = fromApi && hasSectionItems(dto?.experts) ? dto!.experts! : [];
-  const apiTestimonials =
-    fromApi && hasSectionItems(dto?.testimonials) ? dto!.testimonials! : [];
-  const apiRooms = fromApi && hasSectionItems(dto?.rooms) ? dto!.rooms! : [];
-  const apiIncluded = fromApi ? includedLabels(dto?.inclusions) : [];
-  const apiExcluded = fromApi ? excludedLabels(dto?.inclusions) : [];
+  const apiExperts = hasSectionItems(dto?.experts) ? dto!.experts! : [];
+  const apiTestimonials = hasSectionItems(dto?.testimonials) ? dto!.testimonials! : [];
+  const apiRooms = hasSectionItems(dto?.rooms) ? dto!.rooms! : [];
+  const apiIncluded = includedLabels(dto?.inclusions);
+  const apiExcluded = excludedLabels(dto?.inclusions);
 
   return (
     <ListingPlanProvider>
@@ -155,38 +130,15 @@ export function RetreatDetail() {
       <div className="max-w-7xl mx-auto px-4 py-8 pb-28 lg:pb-12">
         <RetreatListingComponent1 listing={listing} />
 
-        {localSlug && (
-          <>
-            <RetreatListingComponent2 retreatId={retreatId} findMyMatch={findMyMatch} />
-            <RetreatListingComponent3 retreatId={retreatId} findMyMatch={findMyMatch} />
-            <RetreatListingComponent4 retreatId={retreatId} />
-          </>
+        {findMyMatch && (
+          <RetreatListingComponent2 retreatId={retreatId} findMyMatch={findMyMatch} />
         )}
 
-        {showLocalExperts && <RetreatListingComponent5 retreatId={retreatId} />}
         {apiExperts.length > 0 && <ApiExpertsSection experts={apiExperts} />}
-
-        {showLocalTestimonials && <RetreatListingComponent6 retreatId={retreatId} />}
         {apiTestimonials.length > 0 && <ApiTestimonialsSection stories={apiTestimonials} />}
-
-        {showLocalRooms && <RetreatListingComponent7 retreatId={retreatId} />}
         {apiRooms.length > 0 && <ApiRoomsSection rooms={apiRooms} />}
-
-        {showLocalInclusions && <RetreatListingComponent8 retreatId={retreatId} />}
         {(apiIncluded.length > 0 || apiExcluded.length > 0) && (
           <ApiInclusionsSection included={apiIncluded} excluded={apiExcluded} />
-        )}
-
-        {!fromApi && (
-          <section className="mt-12 pt-10 border-t border-sand-200 max-w-3xl">
-            <h2 className="font-display text-xl font-semibold text-sage-800 mb-2">
-              About this retreat
-            </h2>
-            <p className="text-sm text-sage-600 leading-relaxed">
-              Programme details being verified. Fuller inclusions, schedules and stay information
-              will appear here once confirmed with the partner.
-            </p>
-          </section>
         )}
       </div>
     </ListingPlanProvider>

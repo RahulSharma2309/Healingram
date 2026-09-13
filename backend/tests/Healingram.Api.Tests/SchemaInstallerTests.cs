@@ -12,18 +12,20 @@ public class SchemaInstallerTests
         {
             @"C:\db\001_schemas.sql",
             "/var/db/010_enterprise_foundation.sql",
-            "backend/db/011_enterprise_hardening.sql"
+            "backend/db/011_enterprise_hardening.sql",
+            "backend/db/012_backend_driven_application.sql"
         };
         var applied = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "001_schemas.sql",
-            "010_enterprise_foundation.sql"
+            "010_enterprise_foundation.sql",
+            "011_enterprise_hardening.sql"
         };
 
         var pending = SchemaInstaller.PendingFiles(files, applied);
 
-        Assert.Equal(["011_enterprise_hardening.sql"], pending.Select(SchemaInstaller.MigrationId));
-        Assert.Equal("011", SchemaInstaller.MigrationVersion(pending[0]));
+        Assert.Equal(["012_backend_driven_application.sql"], pending.Select(SchemaInstaller.MigrationId));
+        Assert.Equal("012", SchemaInstaller.MigrationVersion(pending[0]));
     }
 
     [Fact]
@@ -42,15 +44,36 @@ public class SchemaInstallerTests
         {
             "001_schemas.sql",
             "010_enterprise_foundation.sql",
-            "011_enterprise_hardening.sql"
+            "011_enterprise_hardening.sql",
+            "012_backend_driven_application.sql"
         };
 
-        var withoutHardening = SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: true, hasHardeningColumns: false);
+        var missingFoundation = SchemaInstaller.LegacyIdsToRecord(
+            files,
+            hasExistingSchema: true,
+            hasFoundationTables: false,
+            hasHardeningColumns: false);
+        Assert.Equal(["001_schemas.sql"], missingFoundation);
+
+        var withoutHardening = SchemaInstaller.LegacyIdsToRecord(
+            files,
+            hasExistingSchema: true,
+            hasFoundationTables: true,
+            hasHardeningColumns: false);
         Assert.Equal(["001_schemas.sql", "010_enterprise_foundation.sql"], withoutHardening);
 
-        var withHardening = SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: true, hasHardeningColumns: true);
-        Assert.Equal(3, withHardening.Count);
+        var withHardening = SchemaInstaller.LegacyIdsToRecord(
+            files,
+            hasExistingSchema: true,
+            hasFoundationTables: true,
+            hasHardeningColumns: true);
+        Assert.Equal(["001_schemas.sql", "010_enterprise_foundation.sql", "011_enterprise_hardening.sql"], withHardening);
+        Assert.DoesNotContain("012_backend_driven_application.sql", withHardening);
 
-        Assert.Empty(SchemaInstaller.LegacyIdsToRecord(files, hasExistingSchema: false, hasHardeningColumns: false));
+        Assert.Empty(SchemaInstaller.LegacyIdsToRecord(
+            files,
+            hasExistingSchema: false,
+            hasFoundationTables: false,
+            hasHardeningColumns: false));
     }
 }

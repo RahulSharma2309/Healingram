@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calendar, MapPin, Search, Sparkles } from "lucide-react";
-import { therapyCategories } from "../data/mockData";
+import { fetchNeeds, type CatalogNeed } from "../lib/api/catalog";
 
 export function SearchBar({
   compact = false,
@@ -14,12 +14,17 @@ export function SearchBar({
   const [location, setLocation] = useState("");
   const [category, setCategory] = useState("");
   const [dates, setDates] = useState("");
+  const [needs, setNeeds] = useState<CatalogNeed[]>([]);
+
+  useEffect(() => {
+    fetchNeeds().then(setNeeds).catch(() => setNeeds([]));
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const params = new URLSearchParams();
     if (location) params.set("location", location);
-    if (category) params.set("therapy", category);
+    if (category) params.set("need", category);
     if (dates) params.set("dates", dates);
     navigate(`/search?${params.toString()}`);
   };
@@ -49,9 +54,9 @@ export function SearchBar({
             className="w-full outline-none text-sm text-sage-800 bg-transparent"
           >
             <option value="">What are you seeking?</option>
-            {therapyCategories.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.name}
+            {needs.map((need) => (
+              <option key={need.slug} value={need.slug}>
+                {need.label}
               </option>
             ))}
           </select>

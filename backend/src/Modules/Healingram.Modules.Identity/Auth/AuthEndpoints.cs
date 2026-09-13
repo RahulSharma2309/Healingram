@@ -40,7 +40,13 @@ internal static class AuthEndpoints
                 return AuthHttp.Unauthorized("Unauthorized");
             }
 
-            return AuthHttp.From(await service.GetCurrentUserAsync(userId, ct));
+            var result = await service.GetCurrentUserAsync(userId, ct);
+            if (result.Status == AuthStatus.Ok && result.User is { } user)
+            {
+                return Results.Ok(user with { AuthKind = RoleAuthorization.GetAuthKind(principal) });
+            }
+
+            return AuthHttp.From(result);
         }).RequireAuthorization().WithTags("Users");
 
         app.MapPatch("/api/users/me", async (

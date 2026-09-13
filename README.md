@@ -1,6 +1,13 @@
 # Healingram
 
-Programme-led retreat marketplace. The real app is `src/` (React) talking to a .NET modular monolith through a gateway. **Documentation:** [`docs/README.md`](docs/README.md).
+Programme-led retreat marketplace.
+
+- `src/` is the canonical React frontend (presentation only).
+- `backend/` is the canonical modular monolith.
+- PostgreSQL is the business source of truth.
+- `ui-reference` is deprecated and removed from this branch.
+
+The site talks to the gateway. **Documentation:** [`docs/README.md`](docs/README.md).
 
 ## Run on this laptop
 
@@ -28,6 +35,7 @@ If something else owns port 5000 (old Docker `infra-gateway-1`), stop it.
 
 ```powershell
 dotnet test backend/Healingram.slnx
+npm test
 .\scripts\uat-flows.ps1
 ```
 

@@ -7,6 +7,7 @@ using Healingram.Contracts.Availability;
 using Healingram.Contracts.Booking;
 using Healingram.Contracts.Catalog;
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Inventory;
 using Healingram.Contracts.Partners;
 using Healingram.Modules.Availability.Domain;
 using Healingram.Modules.Availability.Persistence;
@@ -25,7 +26,10 @@ internal sealed class AvailabilityService(
     ILogger<AvailabilityService> logger,
     INotificationOutbox? outbox = null,
     IUnitOfWork? unitOfWork = null,
-    IAuditPort? audit = null)
+    IAuditPort? audit = null,
+    ICatalogQuotePort? quotes = null,
+    IInventoryProvider? inventory = null,
+    IUserInboxPort? inbox = null)
 {
     public async Task<AvailabilityOutcome> CreateAsync(
         CreateAvailabilityRequest request,
@@ -62,6 +66,23 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Invalid("retreat is not a published stay");
         }
 
+        if (inventory is not null)
+        {
+            var check = await inventory.CheckAvailabilityAsync(
+                new InventoryCheckRequest(
+                    stay.RetreatSlug,
+                    stay.ProgrammeSlug,
+                    stay.CheckIn,
+                    stay.DurationNights,
+                    stay.Guests,
+                    stay.Occupancy),
+                cancellationToken);
+            if (!check.Available)
+            {
+                return AvailabilityOutcome.Invalid(check.Reason ?? "inventory is not available");
+            }
+        }
+
         var existing = await store.FindByIdempotencyKeyAsync(stay.IdempotencyKey, cancellationToken);
         if (existing is not null)
         {
@@ -83,6 +104,16 @@ internal sealed class AvailabilityService(
         }
 
         var now = clock.GetUtcNow();
+        string snapshotJson;
+        try
+        {
+            snapshotJson = await CaptureSnapshotAsync(request.QuoteId, stay, now, cancellationToken);
+        }
+        catch (Exception ex) when (ex is CatalogQuoteException or InvalidOperationException)
+        {
+            return AvailabilityOutcome.Invalid(ex.Message);
+        }
+
         var year = now.Year;
         var sequence = await store.NextPublicSequenceAsync(cancellationToken);
         var entity = new AvailabilityRequestEntity
@@ -98,7 +129,7 @@ internal sealed class AvailabilityService(
             RetreatSlug = stay.RetreatSlug,
             ProgrammeSlug = stay.ProgrammeSlug,
             Status = AvailabilityStatuses.Requested,
-            SnapshotJson = PriceSnapshotFactory.Capture(stay, now),
+            SnapshotJson = snapshotJson,
             IdempotencyKey = stay.IdempotencyKey,
             RequestedAt = now,
             History =
@@ -120,10 +151,23 @@ internal sealed class AvailabilityService(
                 async () =>
                 {
                     await store.InsertAsync(entity, cancellationToken);
+                    if (inventory is not null)
+                    {
+                        await inventory.CreateHoldAsync(
+                            new InventoryHoldRequest(entity.RetreatSlug, entity.ProgrammeSlug, entity.PublicId),
+                            cancellationToken);
+                    }
+
                     await EnqueueRequired(
                         NotificationKinds.AvailabilityRequested,
                         $"availability-requested:{entity.PublicId}",
                         new { publicId = entity.PublicId },
+                        cancellationToken);
+                    await NotifyCustomerAsync(
+                        entity,
+                        NotificationKinds.AvailabilityRequested,
+                        "Availability request received",
+                        "We received your request. No payment is required yet.",
                         cancellationToken);
                 },
                 cancellationToken);
@@ -565,6 +609,30 @@ internal sealed class AvailabilityService(
                         $"availability-confirmed:{entity.PublicId}",
                         new { publicId = entity.PublicId },
                         cancellationToken);
+                    await NotifyCustomerAsync(
+                        entity,
+                        NotificationKinds.PaymentReady,
+                        "Your retreat is available",
+                        "This request is ready for payment.",
+                        cancellationToken);
+                }
+                else if (string.Equals(toStatus, AvailabilityStatuses.AlternativeOffered, StringComparison.Ordinal))
+                {
+                    await NotifyCustomerAsync(
+                        entity,
+                        NotificationKinds.AvailabilityAlternative,
+                        "Alternative dates proposed",
+                        "The retreat suggested a different option for your request.",
+                        cancellationToken);
+                }
+                else if (string.Equals(toStatus, AvailabilityStatuses.Unavailable, StringComparison.Ordinal))
+                {
+                    await NotifyCustomerAsync(
+                        entity,
+                        NotificationKinds.AvailabilityUnavailable,
+                        "Those dates aren’t available",
+                        "Try different dates or see similar retreats.",
+                        cancellationToken);
                 }
             },
             cancellationToken);
@@ -597,6 +665,69 @@ internal sealed class AvailabilityService(
                 entity.SnapshotJson,
                 amount,
                 entity.CustomerUserId),
+            cancellationToken);
+    }
+
+    private async Task<string> CaptureSnapshotAsync(
+        Guid? quoteId,
+        ValidatedStay stay,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (quotes is null)
+        {
+            return PriceSnapshotFactory.Capture(stay, now);
+        }
+
+        CatalogQuote? quote = null;
+        if (quoteId is { } id)
+        {
+            quote = await quotes.GetQuoteAsync(id, cancellationToken);
+            if (quote is null)
+            {
+                throw new InvalidOperationException("quote was not found");
+            }
+        }
+        else
+        {
+            quote = await quotes.QuoteAsync(
+                new CatalogQuoteRequest(
+                    stay.RetreatSlug,
+                    stay.ProgrammeSlug,
+                    stay.DurationNights,
+                    stay.Occupancy,
+                    stay.Guests),
+                cancellationToken);
+        }
+
+        if (!quote.RetreatSlug.Equals(stay.RetreatSlug, StringComparison.OrdinalIgnoreCase)
+            || !quote.ProgrammeSlug.Equals(stay.ProgrammeSlug, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("quote does not match this stay");
+        }
+
+        return PriceSnapshotFactory.FromQuote(quote, stay, now);
+    }
+
+    private async Task NotifyCustomerAsync(
+        AvailabilityRequestEntity entity,
+        string kind,
+        string title,
+        string body,
+        CancellationToken cancellationToken)
+    {
+        if (inbox is null || entity.CustomerUserId is null)
+        {
+            return;
+        }
+
+        await inbox.WriteAsync(
+            entity.CustomerUserId.Value,
+            kind,
+            title,
+            body,
+            "availability_request",
+            entity.PublicId,
             cancellationToken);
     }
 

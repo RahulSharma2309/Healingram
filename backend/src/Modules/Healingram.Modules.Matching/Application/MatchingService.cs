@@ -13,21 +13,26 @@ internal static class MatchingInstrumentation
 internal sealed class MatchingService(
     ICatalogReadPort catalog,
     IMatchSessionStore sessions,
-    ILogger<MatchingService> logger)
+    ILogger<MatchingService> logger,
+    IMatchOptionStore? options = null)
 {
+    public async Task<MatchOptionSet> GetOptionsAsync(CancellationToken cancellationToken)
+        => options is null ? MatchOptionSet.Legacy() : await options.LoadActiveAsync(cancellationToken);
+
     public async Task<MatchingResult> CreateSessionAsync(
         CreateMatchSessionRequest? request,
         CancellationToken cancellationToken)
     {
         using var activity = MatchingInstrumentation.Source.StartActivity("matching.create_session");
+        var optionSet = await GetOptionsAsync(cancellationToken);
 
-        if (!MatchAnswerValidator.TryNormalize(request, out var answers, out var details))
+        if (!MatchAnswerValidator.TryNormalize(request, optionSet, out var answers, out var details))
         {
             return MatchingResult.Invalid([.. details]);
         }
 
         var published = await catalog.GetPublishedRetreatsForMatchAsync(cancellationToken);
-        var ranked = MatchEngine.Rank(answers, published);
+        var ranked = MatchEngine.Rank(answers, published, optionSet);
         var matches = ranked
             .Select(m => new MatchItemDto(m.Slug, m.Reasons))
             .ToArray();

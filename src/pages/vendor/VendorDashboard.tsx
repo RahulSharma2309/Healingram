@@ -13,14 +13,16 @@ import {
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
-import { formatInr } from "../../data/programmePricing";
+import { formatInr } from "../../lib/money";
 import { addNights } from "../../lib/pricing";
+import { fetchPartnerMe, type PartnerMe } from "../../lib/api/partner";
 
 export function VendorDashboard() {
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [action, setAction] = useState<"confirm" | "alternative" | null>(null);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [partner, setPartner] = useState<PartnerMe | null>(null);
 
   const refresh = async () => {
     setRequests(listAvailabilityRequests());
@@ -35,6 +37,7 @@ export function VendorDashboard() {
 
   useEffect(() => {
     refresh();
+    fetchPartnerMe().then(setPartner).catch(() => setPartner(null));
     const onChange = () => refresh();
     window.addEventListener("healingram-requests", onChange);
     return () => window.removeEventListener("healingram-requests", onChange);
@@ -51,7 +54,13 @@ export function VendorDashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-2xl font-bold text-sage-800">Partner dashboard</h1>
-        <p className="text-sm text-sage-600 mt-1">Availability requests for launch retreats</p>
+        <p className="text-sm text-sage-600 mt-1">Availability requests for your published retreats</p>
+        {partner && (
+          <p className="text-sm text-sage-600 mt-2">
+            {partner.memberships.map((m) => `${m.partnerName} · ${m.role}`).join(" · ") || "Partner"}
+            {partner.retreatSlugs.length > 0 ? ` · ${partner.retreatSlugs.join(", ")}` : ""}
+          </p>
+        )}
       </div>
 
       <section id="availability-requests" className="bg-white rounded-xl border border-sand-200 p-6">
@@ -84,7 +93,7 @@ export function VendorDashboard() {
                       {isAgingRequest(r) && (
                         <span className="ml-2 text-amber-700 text-xs font-medium">Aging</span>
                       )}
-                      <span className="ml-2 text-sage-500">· {requestAgeLabel(r.requestedAt)}</span>
+                      <span className="ml-2 text-sage-500">· {requestAgeLabel(r)}</span>
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">

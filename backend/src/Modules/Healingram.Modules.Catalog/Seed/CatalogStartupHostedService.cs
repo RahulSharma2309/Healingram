@@ -34,6 +34,7 @@ internal sealed class CatalogStartupHostedService(
         await store.EnsurePublicSchemaAsync(cancellationToken);
         var before = await store.CountRetreatsAsync(cancellationToken);
         await store.SeedAsync(LaunchCatalogData.AllForSeed(), cancellationToken);
+        await store.SeedPresentationAsync(cancellationToken);
         var after = await store.CountRetreatsAsync(cancellationToken);
         logger.LogInformation(
             "Catalog seed applied; retreats before={Before} after={After}",

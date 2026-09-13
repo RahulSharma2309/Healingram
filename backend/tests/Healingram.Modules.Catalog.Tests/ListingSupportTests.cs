@@ -28,12 +28,12 @@ public class ListingSupportTests
         var listing = await catalog.GetListingAsync("shathayu", CancellationToken.None);
 
         Assert.NotNull(listing);
-        Assert.Null(listing!.Experts);
-        Assert.Null(listing.Testimonials);
-        Assert.Null(listing.Rooms);
-        Assert.Null(listing.Inclusions);
+        Assert.Empty(listing!.Experts);
+        Assert.Empty(listing.Testimonials);
+        Assert.Empty(listing.Rooms);
+        Assert.Empty(listing.Inclusions);
         Assert.NotEmpty(listing.Programmes);
-        Assert.All(listing.Programmes, p => Assert.Null(p.Inclusions));
+        Assert.All(listing.Programmes, p => Assert.Empty(p.Inclusions));
     }
 
     [Fact]

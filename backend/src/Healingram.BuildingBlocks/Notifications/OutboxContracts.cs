@@ -13,7 +13,11 @@ public static class NotificationKinds
 {
     public const string AvailabilityRequested = "availability_requested";
     public const string AvailabilityConfirmed = "availability_confirmed";
+    public const string AvailabilityAlternative = "availability_alternative";
+    public const string AvailabilityUnavailable = "availability_unavailable";
+    public const string PaymentReady = "payment_ready";
     public const string PaymentPaid = "payment_paid";
+    public const string BookingConfirmed = "booking_confirmed";
 }
 
 public sealed record OutboxMessage(

@@ -6,10 +6,12 @@ internal static class MatchEngine
 {
     public static IReadOnlyList<RankedMatch> Rank(
         MatchAnswers answers,
-        IReadOnlyList<PublishedRetreatMatchCard> published)
+        IReadOnlyList<PublishedRetreatMatchCard> published,
+        MatchOptionSet? options = null)
     {
-        var needThemes = ThemesFrom(answers.Q1, MatchOptionCatalog.NeedThemes);
-        var experienceThemes = ExperienceThemes(answers.Q2);
+        var catalog = options ?? MatchOptionSet.Legacy();
+        var needThemes = ThemesFrom(answers.Q1, catalog.NeedThemes);
+        var experienceThemes = ExperienceThemes(answers.Q2, catalog);
         var openRecommendation = Contains(answers.Q2, "open-rec");
         var scored = new List<RankedMatch>();
 
@@ -47,7 +49,7 @@ internal static class MatchEngine
             {
                 score += 2;
             }
-            else if (DurationFits(retreat, answers.Q3))
+            else if (DurationFits(retreat, answers.Q3, catalog))
             {
                 score += 3;
             }
@@ -78,7 +80,7 @@ internal static class MatchEngine
             var isExact = destOk
                 && (needThemes.Count == 0 || overlapNeeds.Length > 0)
                 && (experienceThemes.Count == 0 || overlapExp.Length > 0 || openRecommendation)
-                && (IsFlexibleDuration(answers.Q3) || DurationFits(retreat, answers.Q3));
+                && (IsFlexibleDuration(answers.Q3) || DurationFits(retreat, answers.Q3, catalog));
 
             scored.Add(new RankedMatch(
                 retreat.Slug,
@@ -120,13 +122,13 @@ internal static class MatchEngine
         return set;
     }
 
-    private static HashSet<string> ExperienceThemes(IReadOnlyList<string> experiences)
+    private static HashSet<string> ExperienceThemes(IReadOnlyList<string> experiences, MatchOptionSet catalog)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var openOnly = experiences.Count > 0;
         foreach (var id in experiences)
         {
-            if (!MatchOptionCatalog.ExperienceThemes.TryGetValue(id, out var themes))
+            if (!catalog.ExperienceThemes.TryGetValue(id, out var themes))
             {
                 continue;
             }
@@ -178,14 +180,15 @@ internal static class MatchEngine
         return retreat.StateSlug.Equals(destination, StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static bool DurationFits(PublishedRetreatMatchCard retreat, string duration)
+    internal static bool DurationFits(PublishedRetreatMatchCard retreat, string duration, MatchOptionSet? options = null)
     {
+        var catalog = options ?? MatchOptionSet.Legacy();
         if (IsFlexibleDuration(duration))
         {
             return true;
         }
 
-        if (!MatchOptionCatalog.DurationThemes.TryGetValue(duration, out var wanted) || wanted.Length == 0)
+        if (!catalog.DurationThemes.TryGetValue(duration, out var wanted) || wanted.Length == 0)
         {
             return true;
         }
@@ -215,7 +218,7 @@ internal static class MatchEngine
         var reasons = new List<string>();
         var themes = retreat.ProgrammeThemes ?? [];
 
-        if (!IsFlexibleDuration(answers.Q3) && DurationFits(retreat, answers.Q3))
+        if (!IsFlexibleDuration(answers.Q3) && DurationFits(retreat, answers.Q3, MatchOptionSet.Legacy()))
         {
             reasons.Add("Fits your available time");
         }

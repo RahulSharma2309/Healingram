@@ -283,7 +283,7 @@ India: DPDP, GST invoices, TCS/TDS, marketplace-vs-agent disclosure — not in t
 | P2-5 | Guest JWT can call wishlist / trips / `PATCH /api/users/me` | `RequireAuthorization` only; frontend hides dashboard for guests |
 | P2-6 | CI is frontend build + `dotnet test` only | `.github/workflows/ci.yml` — no image build, no prod-config smoke |
 | P2-7 | Schema installer re-runs every `*.sql` every boot | Works while scripts stay idempotent; not a versioned migrator. `stack.md` still lists `001`…`007`; `008`/`009` exist |
-| P2-8 | `ui-reference/` old demo still in repo | `architecture.md` says delete when unused |
+| P2-8 | `ui-reference/` old demo still in repo | **Closed on `story/STORY-enterprise-backend-driven-application`.** `src/` is the only frontend. Business data is Postgres → API → React. `localStorage` is gone under `src/`. |
 | P2-9 | Header items 5–11 still `awaiting_spec` while UI is live | `headerConfig.ts` |
 | P2-10 | Dead `RetreatCard` with Guest favourite / stars / review counts | `mockData.ts` — not used on `/retreats` today; will get wired by accident |
 | P2-11 | Questionnaire “Doctor-led Ayurveda” | Adjacent to medical framing; PO forbids “medically recommended” |

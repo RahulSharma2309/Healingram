@@ -17,6 +17,8 @@ internal sealed class RetreatSnapshot
     public IReadOnlyList<RoomSnapshot> Rooms { get; init; } = [];
     public IReadOnlyList<ExpertSnapshot> Experts { get; init; } = [];
     public IReadOnlyList<TestimonialSnapshot> Testimonials { get; init; } = [];
+    public IReadOnlyList<MediaSnapshot> Media { get; init; } = [];
+    public IReadOnlyList<SectionSnapshot> Sections { get; init; } = [];
 
     public PublicationInput ToPublicationInput() => new(
         Status,
@@ -36,6 +38,8 @@ internal sealed class ProgrammeSnapshot
     public required string NeedSlug { get; init; }
     public required string ThemeSlug { get; init; }
     public required int[] SupportedDurations { get; init; }
+    public string? Description { get; init; }
+    public string? BestFor { get; init; }
     public IReadOnlyList<PriceSnapshot> Prices { get; init; } = [];
     public IReadOnlyList<InclusionSnapshot> Inclusions { get; init; } = [];
 }
@@ -52,6 +56,7 @@ internal sealed class RoomSnapshot
 {
     public required string Name { get; init; }
     public required int OccupancyMax { get; init; }
+    public string? Description { get; init; }
 }
 
 internal sealed class ExpertSnapshot
@@ -59,6 +64,22 @@ internal sealed class ExpertSnapshot
     public required string Name { get; init; }
     public string? Role { get; init; }
     public required bool Verified { get; init; }
+    public string? Bio { get; init; }
+    public string? ImageUrl { get; init; }
+}
+
+internal sealed class MediaSnapshot
+{
+    public required string Url { get; init; }
+    public string? Alt { get; init; }
+    public required string Category { get; init; }
+    public int SortOrder { get; init; }
+}
+
+internal sealed class SectionSnapshot
+{
+    public required string Kind { get; init; }
+    public required string PayloadJson { get; init; }
 }
 
 internal sealed class TestimonialSnapshot

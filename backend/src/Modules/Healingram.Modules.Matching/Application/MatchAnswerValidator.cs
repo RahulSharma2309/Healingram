@@ -6,6 +6,13 @@ internal static class MatchAnswerValidator
         CreateMatchSessionRequest? request,
         out MatchAnswers answers,
         out IReadOnlyList<string> details)
+        => TryNormalize(request, MatchOptionSet.Legacy(), out answers, out details);
+
+    public static bool TryNormalize(
+        CreateMatchSessionRequest? request,
+        MatchOptionSet options,
+        out MatchAnswers answers,
+        out IReadOnlyList<string> details)
     {
         var errors = new List<string>();
         if (request?.Answers is null)
@@ -15,10 +22,10 @@ internal static class MatchAnswerValidator
             return false;
         }
 
-        var q1 = NormalizeMulti(request.Answers.Q1, MatchOptionCatalog.NeedIds, "q1", errors);
-        var q2 = NormalizeMulti(request.Answers.Q2, MatchOptionCatalog.ExperienceIds, "q2", errors);
-        var q3 = NormalizeSingle(request.Answers.Q3, MatchOptionCatalog.DurationIds, "q3", errors);
-        var q4 = NormalizeMulti(request.Answers.Q4, MatchOptionCatalog.Destinations, "q4", errors);
+        var q1 = NormalizeMulti(request.Answers.Q1, options.NeedIds, "q1", errors);
+        var q2 = NormalizeMulti(request.Answers.Q2, options.ExperienceIds, "q2", errors);
+        var q3 = NormalizeSingle(request.Answers.Q3, options.DurationIds, "q3", errors);
+        var q4 = NormalizeMulti(request.Answers.Q4, options.Destinations, "q4", errors);
 
         if (errors.Count > 0)
         {

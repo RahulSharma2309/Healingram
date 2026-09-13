@@ -2,25 +2,15 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { IndiaPhoneField } from "../account/IndiaPhoneField";
-import { getProgrammePricing } from "../../data/programmePricing";
 import { nationalPhone } from "../../lib/accountValidation";
+import { quoteProgrammePrice } from "../../lib/api/catalog";
+import { apiErrorMessage } from "../../lib/api/client";
 import {
   createAvailabilityRequest,
   type AvailabilityRequestSource,
 } from "../../lib/availabilityRequests";
-import {
-  getCustomerId,
-  getCustomerProfile,
-  isLoggedIn,
-  saveCustomerProfile,
-} from "../../lib/auth";
-import {
-  addNights,
-  buildPriceSnapshot,
-  calculateProgrammeTotal,
-  formatDisplayDate,
-  nightsBetween,
-} from "../../lib/pricing";
+import { getCustomerProfile, isLoggedIn } from "../../lib/auth";
+import { addNights, formatDisplayDate, nightsBetween } from "../../lib/pricing";
 
 export type AvailabilityDraft = {
   retreatId: string;
@@ -35,6 +25,7 @@ export type AvailabilityDraft = {
   occupancy: string;
   roomType: string;
   displayedPrice: string;
+  quoteId?: string;
   source?: AvailabilityRequestSource;
   /** Collect start date / guests in this modal before requesting */
   needsBookingDetails?: boolean;
@@ -79,7 +70,6 @@ export function AvailabilityRequestModal({
   );
   const [localGuests, setLocalGuests] = useState(String(draft.guests || 2));
 
-  const pricing = getProgrammePricing(draft.retreatId, draft.programmeId);
   const minCheckIn = draft.minCheckIn ?? new Date().toISOString().slice(0, 10);
   const needsDetails = Boolean(draft.needsBookingDetails);
 
@@ -99,28 +89,7 @@ export function AvailabilityRequestModal({
 
   const guestCount = Math.floor(Number(localGuests)) || 1;
 
-  const livePriceLabel = useMemo(() => {
-    if (!pricing) return draft.displayedPrice;
-    const calc = calculateProgrammeTotal(pricing, guestCount, "auto");
-    if (calc?.base != null) {
-      const nights = draft.isFlexible
-        ? nightsBetween(localCheckIn, localFlexibleOut)
-        : draft.durationNights;
-      if (!nights || !localCheckIn) {
-        return `From ₹${calc.base.toLocaleString("en-IN")}`;
-      }
-      return `₹${calc.base.toLocaleString("en-IN")}`;
-    }
-    return draft.displayedPrice;
-  }, [
-    pricing,
-    draft.displayedPrice,
-    draft.isFlexible,
-    draft.durationNights,
-    localCheckIn,
-    localFlexibleOut,
-    guestCount,
-  ]);
+  const livePriceLabel = draft.displayedPrice;
 
   useEffect(() => {
     if (!open) return;
@@ -171,11 +140,6 @@ export function AvailabilityRequestModal({
       setError("Please enter your name, email and 10-digit mobile number.");
       return;
     }
-    if (!pricing) {
-      setError("Programme pricing record not found.");
-      return;
-    }
-
     const nights = draft.isFlexible
       ? nightsBetween(localCheckIn, localFlexibleOut)
       : draft.durationNights;
@@ -189,12 +153,6 @@ export function AvailabilityRequestModal({
     }
 
     setSubmitting(true);
-    saveCustomerProfile({
-      name: name.trim(),
-      email: email.trim(),
-      phone,
-      countryCode: "+91",
-    });
 
     onBookingDetailsChange?.({
       checkIn: localCheckIn,
@@ -202,22 +160,16 @@ export function AvailabilityRequestModal({
       guests: guestCount,
     });
 
-    const calc = calculateProgrammeTotal(pricing, guestCount, "auto");
-    const snapshot = buildPriceSnapshot({
-      row: pricing,
-      guests: guestCount,
-      nights,
-      occupancyPreference:
-        calc?.occupancy === "single"
-          ? "single"
-          : calc?.occupancy === "double"
-            ? "double"
-            : "auto",
-    });
-
     try {
+      const quote = await quoteProgrammePrice({
+        retreatSlug: draft.retreatId,
+        programmeSlug: draft.programmeId,
+        durationNights: nights,
+        occupancy: draft.occupancy || "package",
+        guests: guestCount,
+      });
       const request = await createAvailabilityRequest({
-        customerId: getCustomerId(),
+        customerId: null,
         customerName: name.trim(),
         customerEmail: email.trim(),
         customerPhone: phone,
@@ -231,19 +183,39 @@ export function AvailabilityRequestModal({
         checkIn: localCheckIn,
         checkOut: resolvedCheckOut,
         guests: guestCount,
-        occupancy: calc?.occupancy ?? draft.occupancy,
-        roomType: calc?.roomType ?? draft.roomType,
+        occupancy: quote.occupancy,
+        roomType: draft.roomType,
         displayedPrice: livePriceLabel,
-        priceStatus: pricing.priceStatus,
-        priceSnapshot: snapshot,
-        settlementMode: pricing.settlementMode,
+        priceStatus:
+          quote.priceStatus === "VERIFIED" || quote.priceStatus === "ESTIMATED"
+            ? quote.priceStatus
+            : "ON_REQUEST",
+        priceSnapshot: {
+          priceStatus:
+            quote.priceStatus === "VERIFIED" || quote.priceStatus === "ESTIMATED"
+              ? quote.priceStatus
+              : "ON_REQUEST",
+          baseAmount: quote.baseAmount ?? null,
+          taxAmount: quote.taxAmount ?? null,
+          taxDisplay: "not_confirmed",
+          totalAmount: quote.totalAmount ?? null,
+          occupancy: quote.occupancy,
+          roomType: draft.roomType,
+          durationNights: nights,
+          guests: guestCount,
+          currency: "INR",
+          label: livePriceLabel,
+          capturedAt: new Date().toISOString(),
+        },
+        settlementMode: "MARKETPLACE_SPLIT",
         source: draft.source ?? "listing",
         customerNotes: notes.trim(),
+        quoteId: quote.quoteId,
       });
       onClose();
       navigate(`/requests/${request.requestId}/received`);
-    } catch {
-      setError("Could not submit your availability request. Please try again.");
+    } catch (err) {
+      setError(apiErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

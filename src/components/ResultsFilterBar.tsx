@@ -1,6 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Calendar, MapPin, X } from "lucide-react";
-import type { LocationFilterGroup } from "../data/launchSupply";
+export type LocationFilterGroup = {
+  region: string;
+  regionLabel: string;
+  options: { locality: string; count: number }[];
+};
 
 type ResultsFilterBarProps = {
   location: string;

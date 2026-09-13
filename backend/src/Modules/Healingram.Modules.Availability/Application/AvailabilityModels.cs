@@ -14,7 +14,8 @@ internal sealed record CreateAvailabilityRequest(
     string? CheckIn,
     string? CustomerName,
     string? Email,
-    string? Phone);
+    string? Phone,
+    Guid? QuoteId = null);
 
 internal sealed record ConfirmAvailabilityRequest(decimal? FinalAmountInr);
 

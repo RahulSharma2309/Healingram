@@ -4,6 +4,8 @@ This folder is the **final V1 doc pack**. Start here. The old story-by-story not
 
 Healingram is a **programme-led retreat marketplace**. A guest does not buy a hotel night. They pick a programme, ask if the stay is available, and pay only after the retreat (or Healingram) confirms.
 
+Canonical code: `src/` (frontend), `backend/` (API), PostgreSQL (business data). `ui-reference` is removed.
+
 | Folder | Who it is for | What you get |
 | --- | --- | --- |
 | [po-flows/](po-flows/) | You as Product Owner | How each journey feels, in plain language |

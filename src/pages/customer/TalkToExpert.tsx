@@ -2,16 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Check, MessageCircle, Phone, Shield } from "lucide-react";
 import { getCustomerProfile } from "../../lib/auth";
+import { fetchLeadOptions, type LeadOption } from "../../lib/api/leads";
 import {
   clearExpertReferralContext,
   createExpertLead,
-  HELP_TYPE_OPTIONS,
   openWhatsAppForLead,
   PHONE_COUNTRY_CODES,
   readExpertReferralContext,
-  TRAVEL_WINDOW_OPTIONS,
   validatePhoneNumber,
-  WELLNESS_NEED_OPTIONS,
   type ExpertHelpType,
   type ExpertLead,
   type ExpertLeadSource,
@@ -68,6 +66,23 @@ export function TalkToExpert() {
   const [helpTypes, setHelpTypes] = useState<ExpertHelpType[]>([]);
   const [wellnessNeeds, setWellnessNeeds] = useState<ExpertWellnessNeed[]>([]);
   const [travelWindow, setTravelWindow] = useState<ExpertTravelWindow | "">("");
+  const [helpOptions, setHelpOptions] = useState<LeadOption[]>([]);
+  const [needOptions, setNeedOptions] = useState<LeadOption[]>([]);
+  const [windowOptions, setWindowOptions] = useState<LeadOption[]>([]);
+
+  useEffect(() => {
+    fetchLeadOptions()
+      .then((items) => {
+        setHelpOptions(items.filter((item) => item.kind === "help_type"));
+        setNeedOptions(items.filter((item) => item.kind === "wellness_need"));
+        setWindowOptions(items.filter((item) => item.kind === "travel_window"));
+      })
+      .catch(() => {
+        setHelpOptions([]);
+        setNeedOptions([]);
+        setWindowOptions([]);
+      });
+  }, []);
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -327,13 +342,13 @@ export function TalkToExpert() {
                   What do you need help with?
                 </legend>
                 <div className="mt-2.5 grid sm:grid-cols-2 gap-2">
-                  {HELP_TYPE_OPTIONS.map((opt) => {
-                    const on = helpTypes.includes(opt.id);
+                  {helpOptions.map((opt) => {
+                    const on = helpTypes.includes(opt.key as ExpertHelpType);
                     return (
                       <button
-                        key={opt.id}
+                        key={opt.key}
                         type="button"
-                        onClick={() => setHelpTypes((prev) => toggleInList(prev, opt.id))}
+                        onClick={() => setHelpTypes((prev) => toggleInList(prev, opt.key as ExpertHelpType))}
                         className={`rounded-xl border px-3.5 py-3 text-left text-sm transition ${
                           on
                             ? "border-teal-600/50 bg-teal-50 text-sage-800 ring-1 ring-teal-600/20"
@@ -352,15 +367,15 @@ export function TalkToExpert() {
                   What are you looking for?
                 </legend>
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  {WELLNESS_NEED_OPTIONS.map((opt) => {
-                    const on = wellnessNeeds.includes(opt.id);
+                  {needOptions.map((opt) => {
+                    const on = wellnessNeeds.includes(opt.key as ExpertWellnessNeed);
                     return (
                       <button
-                        key={opt.id}
+                        key={opt.key}
                         type="button"
                         onClick={() =>
                           setWellnessNeeds((prev) =>
-                            toggleInList(prev, opt.id, "not_sure"),
+                            toggleInList(prev, opt.key as ExpertWellnessNeed, "not_sure"),
                           )
                         }
                         className={`rounded-xl border px-3.5 py-2.5 text-sm transition ${
@@ -381,13 +396,13 @@ export function TalkToExpert() {
                   When are you thinking of travelling?
                 </legend>
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  {TRAVEL_WINDOW_OPTIONS.map((opt) => {
-                    const on = travelWindow === opt.id;
+                  {windowOptions.map((opt) => {
+                    const on = travelWindow === opt.key;
                     return (
                       <button
-                        key={opt.id}
+                        key={opt.key}
                         type="button"
-                        onClick={() => setTravelWindow(opt.id)}
+                        onClick={() => setTravelWindow(opt.key as ExpertTravelWindow)}
                         className={`rounded-xl border px-3.5 py-2.5 text-sm transition ${
                           on
                             ? "border-teal-600/50 bg-teal-50 text-sage-800 ring-1 ring-teal-600/20"

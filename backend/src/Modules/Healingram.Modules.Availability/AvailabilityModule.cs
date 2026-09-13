@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using Healingram.BuildingBlocks.Modules;
 using Healingram.Contracts.Availability;
+using Healingram.Contracts.Inventory;
 using Healingram.Modules.Availability.Application;
+using Healingram.Modules.Availability.Inventory;
 using Healingram.Modules.Availability.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -23,6 +25,7 @@ public sealed class AvailabilityModule : IAppModule
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IAvailabilityStore, PostgresAvailabilityStore>();
         services.AddScoped<IRequestAccessLookup, RequestAccessLookup>();
+        services.AddScoped<IInventoryProvider, LocalInventoryProvider>();
         services.AddScoped<AvailabilityService>();
     }
 
