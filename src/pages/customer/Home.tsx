@@ -1,12 +1,11 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { HeroDiscovery } from "../../components/HeroDiscovery";
-import {
-  EXPLORE_BY_NEED_CARDS,
-  HOME_DESTINATION_JOURNEYS,
-} from "../../data/launchSupply";
+import { useCatalogDiscovery } from "../../lib/api/useCatalogDiscovery";
 
 export function Home() {
+  const { needs, destinations, source } = useCatalogDiscovery();
+  const catalogReady = source === "api";
   return (
     <>
       <section className="relative overflow-hidden flex items-center">
@@ -43,8 +42,16 @@ export function Home() {
             </p>
           </div>
 
+          {!catalogReady && (
+            <p className="text-center text-sm text-sage-600 mb-8">
+              {source === "loading"
+                ? "Loading published programmes from the catalog…"
+                : "Cannot reach the catalog. Start the gateway on port 5000 and refresh."}
+            </p>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-            {EXPLORE_BY_NEED_CARDS.map((card) => (
+            {needs.map((card) => (
               <Link
                 key={card.id}
                 to={`/retreats?need=${encodeURIComponent(card.id)}`}
@@ -93,12 +100,12 @@ export function Home() {
               Explore by destination
             </h2>
             <p className="text-sage-600 text-base md:text-lg leading-relaxed text-balance">
-              From restorative stays near Bengaluru to immersive wellness programmes across Kerala.
+              Destinations come from published inventory — including Karnataka, Kerala, and the extra local-demo states.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
-            {HOME_DESTINATION_JOURNEYS.map((dest) => (
+            {destinations.map((dest) => (
               <Link
                 key={dest.region}
                 to={dest.to}

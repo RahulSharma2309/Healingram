@@ -1,7 +1,9 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, X } from "lucide-react";
+import { IndiaPhoneField } from "../account/IndiaPhoneField";
 import { getProgrammePricing } from "../../data/programmePricing";
+import { nationalPhone } from "../../lib/accountValidation";
 import {
   createAvailabilityRequest,
   type AvailabilityRequestSource,
@@ -66,8 +68,7 @@ export function AvailabilityRequestModal({
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
-  const [phone, setPhone] = useState(profile.phone);
-  const [countryCode, setCountryCode] = useState(profile.countryCode || "+91");
+  const [phone, setPhone] = useState(nationalPhone(profile.phone));
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -126,8 +127,7 @@ export function AvailabilityRequestModal({
     const p = getCustomerProfile();
     setName(p.name);
     setEmail(p.email);
-    setPhone(p.phone);
-    setCountryCode(p.countryCode || "+91");
+    setPhone(nationalPhone(p.phone));
     setNotes("");
     setError(null);
     setLocalCheckIn(draft.checkIn);
@@ -137,7 +137,7 @@ export function AvailabilityRequestModal({
 
   if (!open) return null;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!localCheckIn) {
@@ -167,8 +167,8 @@ export function AvailabilityRequestModal({
       setError("Please choose number of guests.");
       return;
     }
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      setError("Please enter your name, email and mobile number.");
+    if (!name.trim() || !email.trim() || phone.length !== 10) {
+      setError("Please enter your name, email and 10-digit mobile number.");
       return;
     }
     if (!pricing) {
@@ -192,8 +192,8 @@ export function AvailabilityRequestModal({
     saveCustomerProfile({
       name: name.trim(),
       email: email.trim(),
-      phone: phone.trim(),
-      countryCode,
+      phone,
+      countryCode: "+91",
     });
 
     onBookingDetailsChange?.({
@@ -215,34 +215,38 @@ export function AvailabilityRequestModal({
             : "auto",
     });
 
-    const request = createAvailabilityRequest({
-      customerId: getCustomerId(),
-      customerName: name.trim(),
-      customerEmail: email.trim(),
-      customerPhone: phone.trim(),
-      countryCode,
-      retreatId: draft.retreatId,
-      retreatName: draft.retreatName,
-      programmeId: draft.programmeId,
-      programmeName: draft.programmeName,
-      durationNights: nights,
-      durationUnit: draft.durationUnit,
-      checkIn: localCheckIn,
-      checkOut: resolvedCheckOut,
-      guests: guestCount,
-      occupancy: calc?.occupancy ?? draft.occupancy,
-      roomType: calc?.roomType ?? draft.roomType,
-      displayedPrice: livePriceLabel,
-      priceStatus: pricing.priceStatus,
-      priceSnapshot: snapshot,
-      settlementMode: pricing.settlementMode,
-      source: draft.source ?? "listing",
-      customerNotes: notes.trim(),
-    });
-
-    setSubmitting(false);
-    onClose();
-    navigate(`/requests/${request.requestId}/received`);
+    try {
+      const request = await createAvailabilityRequest({
+        customerId: getCustomerId(),
+        customerName: name.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone,
+        countryCode: "+91",
+        retreatId: draft.retreatId,
+        retreatName: draft.retreatName,
+        programmeId: draft.programmeId,
+        programmeName: draft.programmeName,
+        durationNights: nights,
+        durationUnit: draft.durationUnit,
+        checkIn: localCheckIn,
+        checkOut: resolvedCheckOut,
+        guests: guestCount,
+        occupancy: calc?.occupancy ?? draft.occupancy,
+        roomType: calc?.roomType ?? draft.roomType,
+        displayedPrice: livePriceLabel,
+        priceStatus: pricing.priceStatus,
+        priceSnapshot: snapshot,
+        settlementMode: pricing.settlementMode,
+        source: draft.source ?? "listing",
+        customerNotes: notes.trim(),
+      });
+      onClose();
+      navigate(`/requests/${request.requestId}/received`);
+    } catch {
+      setError("Could not submit your availability request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -366,9 +370,12 @@ export function AvailabilityRequestModal({
             </div>
           )}
 
+          <p className="text-sm text-sage-600">
+            No payment yet. We’ll check availability with the retreat.
+          </p>
           {!loggedIn && (
             <p className="text-xs text-sage-500">
-              You’re not logged in — we’ll link this request to your email and phone.
+              No account needed. We’ll link this request to your email and mobile.
             </p>
           )}
 
@@ -392,32 +399,7 @@ export function AvailabilityRequestModal({
                 className="mt-1 w-full rounded-xl border border-sand-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
               />
             </label>
-            <div className="grid grid-cols-[100px_1fr] gap-2">
-              <label className="block">
-                <span className="text-xs font-medium text-sage-600">Code</span>
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-sand-200 px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
-                >
-                  <option value="+91">+91</option>
-                  <option value="+1">+1</option>
-                  <option value="+44">+44</option>
-                  <option value="+971">+971</option>
-                  <option value="+65">+65</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-sage-600">Mobile number</span>
-                <input
-                  required
-                  inputMode="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-sand-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
-                />
-              </label>
-            </div>
+            <IndiaPhoneField value={phone} onChange={setPhone} />
             <label className="block">
               <span className="text-xs font-medium text-sage-600">
                 Anything the retreat should know? (optional)

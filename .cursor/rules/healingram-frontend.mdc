@@ -6,9 +6,9 @@ alwaysApply: false
 
 # Frontend conventions
 
-- Spec and `docs/flows/` beat leftover prototype copy.
+- Spec and `docs/po-flows/` beat leftover prototype copy.
 - Public lists come from the catalog API, not a second hardcoded inventory, once Catalog is wired.
-- No unverified price, rating, review count, guest favourite, or out-of-geo destination.
+- No unverified price, rating, review count, guest favourite, or unpublished destination. Places come from catalog inventory (any Indian state that has published retreats).
 - URL holds non-personal filter state only.
 - Async CTAs disable duplicate submits and keep the button visible.
 - Sticky CTAs must not cover content or the keyboard.

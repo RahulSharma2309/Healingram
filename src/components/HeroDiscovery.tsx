@@ -14,7 +14,7 @@ import {
 } from "../data/launchSupply";
 
 /** Placeholder results route — filter state via query until results page is rebuilt */
-const RESULTS_PATH = "/search";
+const RESULTS_PATH = "/retreats";
 const FIND_MY_MATCH_PATH = "/questionnaire";
 
 export function HeroDiscovery() {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -18,8 +18,8 @@ import {
   Sparkles,
   Stethoscope,
 } from "lucide-react";
+import { createMatchSession, matchesFromSession } from "../../lib/api/matching";
 import {
-  rankFindMyMatch,
   regionLabel,
   type FindMyMatchAnswers,
   type MatchDestinationId,
@@ -203,6 +203,11 @@ export function Questionnaire() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<FindMyMatchAnswers>(emptyAnswers);
   const [enterAnim, setEnterAnim] = useState(true);
+  const [ranked, setRanked] = useState<{ exact: RankedMatch[]; closest: RankedMatch[] } | null>(
+    null,
+  );
+  const [matchBusy, setMatchBusy] = useState(false);
+  const [matchError, setMatchError] = useState(false);
 
   useEffect(() => {
     setEnterAnim(false);
@@ -210,9 +215,28 @@ export function Questionnaire() {
     return () => cancelAnimationFrame(t);
   }, [step, phase]);
 
-  const ranked = useMemo(() => {
-    if (phase !== "results") return null;
-    return rankFindMyMatch(answers);
+  useEffect(() => {
+    if (phase !== "results") return;
+    let cancelled = false;
+    setMatchBusy(true);
+    setMatchError(false);
+    (async () => {
+      try {
+        const session = await createMatchSession(answers);
+        const list = await matchesFromSession(session);
+        if (!cancelled) setRanked({ exact: list, closest: [] });
+      } catch {
+        if (!cancelled) {
+          setRanked(null);
+          setMatchError(true);
+        }
+      } finally {
+        if (!cancelled) setMatchBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [phase, answers]);
 
   const question = QUESTIONS[step];
@@ -297,6 +321,30 @@ export function Questionnaire() {
     );
   }
 
+  if (phase === "results" && matchError) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-24 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800 mb-3">
+          Could not load matches
+        </h1>
+        <p className="text-sage-600 mb-6">
+          Find My Match uses the catalog API. Start the gateway and API, then try again.
+        </p>
+        <Link to="/retreats" className="text-sm font-semibold text-teal-600 hover:text-teal-700">
+          Browse retreats
+        </Link>
+      </div>
+    );
+  }
+
+  if (phase === "results" && matchBusy) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-24 text-center text-sage-600">
+        Finding published retreats that fit…
+      </div>
+    );
+  }
+
   if (phase === "results" && ranked) {
     const list = ranked.exact.length ? ranked.exact : ranked.closest;
     const closestOnly = !ranked.exact.length && ranked.closest.length > 0;
@@ -342,7 +390,7 @@ export function Questionnaire() {
                   Retake
                 </button>
                 <Link
-                  to="/search"
+                  to="/retreats"
                   className="px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-500 text-center"
                 >
                   Explore retreats
@@ -365,7 +413,7 @@ export function Questionnaire() {
             >
               Start over
             </button>
-            <Link to="/search" className="text-sm text-sage-500 hover:text-sage-700">
+            <Link to="/retreats" className="text-sm text-sage-500 hover:text-sage-700">
               Browse all retreats
             </Link>
           </div>
@@ -507,7 +555,7 @@ function MatchCard({ match }: { match: RankedMatch }) {
         <div className="flex items-center gap-1 text-sm text-sage-600 mb-1">
           <MapPin className="w-3.5 h-3.5 shrink-0" />
           <span>
-            {retreat.locality}, {regionLabel(retreat.region)}
+            {retreat.locality}, {retreat.stateLabel ?? regionLabel(retreat.region)}
           </span>
         </div>
         <h2 className="font-display text-xl font-semibold text-sage-800 mb-2 leading-snug">

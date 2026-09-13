@@ -22,34 +22,13 @@ public sealed record PublicationInput(
 
 public static class PublicationGate
 {
-    public static readonly HashSet<string> V1States = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "karnataka",
-        "kerala"
-    };
-
-    public static readonly HashSet<string> ForbiddenPublicStates = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "goa",
-        "rishikesh",
-        "himachal-pradesh",
-        "uttarakhand",
-        "north-india"
-    };
-
+    /// <summary>
+    /// Public = active + identity complete + at least one valid programme.
+    /// Geography is inventory-driven and never blocks publication.
+    /// </summary>
     public static bool IsPubliclyVisible(PublicationInput input)
     {
         if (input.Status != RetreatPublicationStatus.Active)
-        {
-            return false;
-        }
-
-        if (!V1States.Contains(input.StateSlug))
-        {
-            return false;
-        }
-
-        if (ForbiddenPublicStates.Contains(input.StateSlug))
         {
             return false;
         }

@@ -7,9 +7,11 @@ description: Healingram QA agent. Tests each finished story against acceptance c
 
 You test **the story that was just built**, then the feature it belongs to if the story completes that feature.
 
+When the user wants **product-wide** local UAT, load `.cursor/skills/healingram-qa-po-uat/SKILL.md` and use `docs/test-cases/`.
+
 ## Before testing
 
-1. Read the story acceptance criteria, `docs/flows/` for the feature, and `docs/process/definition-of-done.md`.
+1. Read `docs/po-flows/` and `docs/test-cases/` for the journey.
 2. Prefer the same path a user or operator would use: UI, then gateway Swagger, then module logs/traces.
 3. Use Docker observability when you need evidence: Seq for logs, Jaeger for traces, Mailpit for email.
 
@@ -20,12 +22,16 @@ You test **the story that was just built**, then the feature it belongs to if th
 3. Loading, empty, and error states from the spec.
 4. Duplicate submit (idempotency) when the story creates a request, lead, payment intent, or notification.
 5. Authorization: customer A must not see customer B.
-6. Integrity: no unverified price/availability/testimonial/credential shown as fact; no out-of-geo retreats.
+6. Integrity: no unverified price/availability/testimonial/credential shown as fact; unpublished or incomplete retreats stay hidden; places come from inventory (no hard-coded state fence).
 7. Mobile vs desktop only when the story touches responsive shell (header, filters, sticky CTA).
+
+## Flow pack (local product)
+
+Journeys live in `docs/test-cases/`. After a full run, note pass/fail there or in the chat.
 
 ## Evidence
 
-Write `docs/qa/STORY-XX-YY-ZZ.md`:
+Write notes against `docs/test-cases/` (or in the chat):
 
 - Environment (Docker or localhost)
 - What you ran

@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { hasRequestSession, isLoggedIn } from "../../lib/auth";
 import { getAvailabilityRequest } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
 
@@ -50,12 +51,17 @@ export function AvailabilityRequestReceived() {
       </div>
 
       <p className="mt-6 text-sm text-sage-600 leading-relaxed">
-        We’re confirming your programme and dates with the retreat. No payment is required yet.
+        We’ll notify you when the retreat responds. No payment is required yet. Current status: waiting for
+        availability.
       </p>
 
       <div className="mt-8 flex flex-col sm:flex-row gap-3">
         <Link
-          to={`/requests/${request.requestId}`}
+          to={
+            isLoggedIn() || hasRequestSession()
+              ? `/requests/${request.requestId}`
+              : `/requests/${request.requestId}/verify`
+          }
           className="inline-flex justify-center rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-500"
         >
           View My Request

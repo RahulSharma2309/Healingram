@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchAdminQueue } from "../../lib/api/availability";
 import {
   adminAddInternalNote,
   adminConfirmFinalPrice,
@@ -8,6 +9,7 @@ import {
   isAgingRequest,
   listAvailabilityRequests,
   listNotifications,
+  mergeServerAvailabilityList,
   requestAgeLabel,
   resendNotification,
   type AvailabilityRequest,
@@ -58,10 +60,16 @@ export function AdminDashboard() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [leadNote, setLeadNote] = useState("");
 
-  const refresh = () => {
+  const refresh = async () => {
     setRequests(listAvailabilityRequests());
     setNotifs(listNotifications("admin").slice(0, 12));
     setLeads(listExpertLeads());
+    try {
+      mergeServerAvailabilityList(await fetchAdminQueue());
+      setRequests(listAvailabilityRequests());
+    } catch {
+      /* admin token missing or API down — keep local store */
+    }
   };
 
   useEffect(() => {
@@ -414,8 +422,8 @@ export function AdminDashboard() {
             <button
               type="button"
               className="px-3 py-1.5 border border-amber-300 text-amber-900 rounded text-sm"
-              onClick={() => {
-                const result = simulateVerifiedPaymentWebhook(selected.requestId);
+              onClick={async () => {
+                const result = await simulateVerifiedPaymentWebhook(selected.requestId);
                 setMsg(result.message);
                 refresh();
               }}

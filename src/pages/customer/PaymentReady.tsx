@@ -1,26 +1,121 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Shield } from "lucide-react";
-import { getAvailabilityRequest, type AvailabilityRequest } from "../../lib/availabilityRequests";
+import { ApiError } from "../../lib/api/client";
+import { getAvailabilityByPublicId } from "../../lib/api/availability";
+import { isRegisteredAccount } from "../../lib/auth";
+import {
+  applyPaymentWebhook,
+  getAvailabilityRequest,
+  mergeServerAvailability,
+  type AvailabilityRequest,
+} from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
 import { formatInr } from "../../data/programmePricing";
-import { startPlaceholderCheckout } from "../../lib/payment";
+import { rememberedIntentId, refreshIntentStatus, startPlaceholderCheckout } from "../../lib/payment";
 
 export function PaymentReady() {
   const { requestId } = useParams();
+  const navigate = useNavigate();
   const [request, setRequest] = useState<AvailabilityRequest | undefined>();
+  const [lookup, setLookup] = useState<"loading" | "ready" | "missing">("loading");
   const [message, setMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [intentId, setIntentId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (requestId) setRequest(getAvailabilityRequest(requestId));
+    if (!requestId) {
+      setLookup("missing");
+      return;
+    }
+
+    const local = getAvailabilityRequest(requestId);
+    if (local) {
+      setRequest(local);
+      setLookup("ready");
+    } else {
+      setLookup("loading");
+    }
+
+    getAvailabilityByPublicId(requestId)
+      .then((dto) => {
+        setRequest(mergeServerAvailability(dto));
+        setLookup("ready");
+      })
+      .catch((error) => {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          navigate(`/requests/${requestId}/verify`, { replace: true });
+          return;
+        }
+        setLookup(getAvailabilityRequest(requestId) ? "ready" : "missing");
+      });
+
+    const remembered = rememberedIntentId(requestId);
+    if (remembered) setIntentId(remembered);
   }, [requestId]);
 
-  if (!request) {
+  useEffect(() => {
+    if (!intentId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const intent = await refreshIntentStatus(intentId);
+        if (cancelled || !requestId) return;
+        if (intent.status === "paid") {
+          const current = getAvailabilityRequest(requestId);
+          if (current && current.status === "PAYMENT_PENDING" && current.finalPayableAmount != null) {
+            applyPaymentWebhook(requestId, {
+              providerPaymentId: intent.id,
+              amount: current.finalPayableAmount,
+              verified: true,
+            });
+          }
+          const latest = getAvailabilityRequest(requestId);
+          if (latest) setRequest(latest);
+        }
+      } catch {
+        /* GET is read-only; ignore if API is down */
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [intentId, requestId]);
+
+  if (lookup === "loading") {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <p className="text-sm text-sage-600">Checking whether this request is payment-ready…</p>
+      </div>
+    );
+  }
+
+  if (lookup === "missing" || !request) {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <h1 className="font-display text-2xl font-bold text-sage-800">Payment not available</h1>
         <Link to="/dashboard" className="mt-6 inline-block text-teal-600">
           My dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  if (request.status === "PAID" || request.status === "CONFIRMED") {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16">
+        <h1 className="font-display text-2xl font-bold text-sage-800">Payment confirmed</h1>
+        <p className="mt-3 text-sm text-sage-600">
+          A verified webhook marked this booking paid. This page did not set that status.
+        </p>
+        <Link
+          to={`/requests/${request.requestId}`}
+          className="mt-6 inline-block text-teal-600 font-medium"
+        >
+          View request
         </Link>
       </div>
     );
@@ -88,17 +183,36 @@ export function PaymentReady() {
         </p>
       </div>
 
+      {!isRegisteredAccount() ? (
+        <div className="mt-6 rounded-2xl border border-sand-200 bg-sand-50 p-5">
+          <h2 className="font-display text-lg font-semibold text-sage-800">Create your Healingram account</h2>
+          <p className="mt-2 text-sm text-sage-600">
+            Your retreat confirmed. Create an account to continue to payment. This keeps the same request —
+            you will not start over.
+          </p>
+          <Link
+            to={`/signup?next=${encodeURIComponent(`/requests/${request.requestId}/payment`)}`}
+            className="mt-4 inline-flex rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-500"
+          >
+            Create account
+          </Link>
+        </div>
+      ) : (
       <button
         type="button"
-        disabled={total == null}
-        onClick={() => {
-          const result = startPlaceholderCheckout(request.requestId);
+        disabled={total == null || submitting}
+        onClick={async () => {
+          setSubmitting(true);
+          const result = await startPlaceholderCheckout(request.requestId);
           setMessage(result.message);
+          if (result.intentId) setIntentId(result.intentId);
+          setSubmitting(false);
         }}
         className="mt-6 w-full rounded-xl bg-teal-600 py-3.5 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
       >
         {total != null ? `Pay ${formatInr(total)} securely` : "Payment amount not confirmed"}
       </button>
+      )}
       <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-sage-500">
         <Shield className="w-3.5 h-3.5" />
         No payment is marked complete until a verified provider webhook confirms it.
@@ -108,6 +222,15 @@ export function PaymentReady() {
         <p role="status" className="mt-4 text-sm text-sage-600 rounded-xl border border-sand-200 bg-sand-50 p-4">
           {message}
         </p>
+      )}
+
+      {intentId && (
+        <Link
+          to={`/payment-success?intent=${encodeURIComponent(intentId)}`}
+          className="mt-4 inline-block text-sm text-sage-600"
+        >
+          Return from provider (status is read-only)
+        </Link>
       )}
 
       <Link

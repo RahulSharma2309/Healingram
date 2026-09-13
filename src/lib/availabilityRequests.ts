@@ -4,6 +4,14 @@
  */
 
 import type { PriceStatus, SettlementMode } from "../data/programmePricing";
+import {
+  type ServerAvailability,
+  acceptAlternativeOnServer,
+  partnerAlternativeOnServer,
+  partnerConfirmOnServer,
+  partnerUnavailableOnServer,
+  postAvailabilityRequest,
+} from "./api/availability";
 import type { PriceSnapshot } from "./pricing";
 
 export type AvailabilityRequestStatus =
@@ -116,7 +124,6 @@ export type NotificationRecord = {
 
 const REQUESTS_KEY = "healingram_availability_requests_v1";
 const NOTIFS_KEY = "healingram_notifications_v1";
-const SEQ_KEY = "healingram_request_seq_v1";
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -135,19 +142,6 @@ function writeJson(key: string, value: unknown): void {
   } catch {
     /* ignore */
   }
-}
-
-function nextRequestId(): string {
-  const year = new Date().getFullYear();
-  let seq = 126;
-  try {
-    seq = Number(localStorage.getItem(SEQ_KEY) || "126");
-    seq += 1;
-    localStorage.setItem(SEQ_KEY, String(seq));
-  } catch {
-    seq = Date.now() % 100000;
-  }
-  return `HR-${year}-${String(seq).padStart(5, "0")}`;
 }
 
 function nextBookingId(): string {
@@ -187,7 +181,7 @@ function upsert(request: AvailabilityRequest): AvailabilityRequest {
   return request;
 }
 
-export function createAvailabilityRequest(input: {
+export async function createAvailabilityRequest(input: {
   customerId: string | null;
   customerName: string;
   customerEmail: string;
@@ -210,9 +204,28 @@ export function createAvailabilityRequest(input: {
   settlementMode: SettlementMode;
   source: AvailabilityRequestSource;
   customerNotes: string;
-}): AvailabilityRequest {
+}): Promise<AvailabilityRequest> {
+  const server = await postAvailabilityRequest({
+    retreatSlug: input.retreatId,
+    programmeSlug: input.programmeId,
+    durationNights: input.durationNights,
+    occupancy: input.occupancy,
+    guests: input.guests,
+    checkIn: input.checkIn,
+    customerName: input.customerName,
+    email: input.customerEmail,
+    phone: input.customerPhone,
+  });
+  const request = buildLocalRequest(input, server.publicId);
+  persistNewRequest(request);
+  return request;
+}
+
+function buildLocalRequest(
+  input: Parameters<typeof createAvailabilityRequest>[0],
+  requestId: string,
+): AvailabilityRequest {
   const now = new Date().toISOString();
-  const requestId = nextRequestId();
   const request: AvailabilityRequest = {
     ...input,
     durationUnit: input.durationUnit ?? "nights",
@@ -232,6 +245,11 @@ export function createAvailabilityRequest(input: {
     paymentMode: null,
   };
 
+  return request;
+}
+
+function persistNewRequest(request: AvailabilityRequest): void {
+  const requestId = request.requestId;
   upsert(request);
   pushNotification({
     audience: "customer",
@@ -245,17 +263,15 @@ export function createAvailabilityRequest(input: {
     type: "new_availability_request",
     requestId,
     title: "New availability request",
-    body: `${input.customerName} requested ${input.programmeName} at ${input.retreatName}.`,
+    body: `${request.customerName} requested ${request.programmeName} at ${request.retreatName}.`,
   });
   pushNotification({
     audience: "admin",
     type: "new_availability_request",
     requestId,
     title: "New availability request",
-    body: `${requestId} · ${input.retreatName}`,
+    body: `${requestId} · ${request.retreatName}`,
   });
-
-  return request;
 }
 
 export function markPartnerViewed(requestId: string): void {
@@ -267,12 +283,13 @@ export function markPartnerViewed(requestId: string): void {
   upsert(r);
 }
 
-export function partnerConfirmAvailability(
+export async function partnerConfirmAvailability(
   requestId: string,
   confirmation: Omit<PartnerConfirmation, "confirmedAt">,
-): AvailabilityRequest | null {
+): Promise<AvailabilityRequest | null> {
   const r = getAvailabilityRequest(requestId);
   if (!r) return null;
+  await partnerConfirmOnServer(requestId, confirmation.finalAmount);
   const now = new Date().toISOString();
   r.partnerConfirmation = { ...confirmation, confirmedAt: now };
   r.finalPayableAmount = confirmation.finalAmount;
@@ -302,14 +319,16 @@ export function partnerConfirmAvailability(
   return r;
 }
 
-export function partnerSuggestAlternative(
+export async function partnerSuggestAlternative(
   requestId: string,
   alternative: Omit<AlternativeProposal, "proposedAt">,
-): AvailabilityRequest | null {
+): Promise<AvailabilityRequest | null> {
   const r = getAvailabilityRequest(requestId);
   if (!r) return null;
-  const now = new Date().toISOString();
-  r.alternative = { ...alternative, proposedAt: now };
+  const proposed = { ...alternative, proposedAt: new Date().toISOString() };
+  await partnerAlternativeOnServer(requestId, proposed);
+  const now = proposed.proposedAt;
+  r.alternative = proposed;
   r.status = "ALTERNATIVE_PROPOSED";
   r.partnerRespondedAt = now;
   r.updatedAt = now;
@@ -327,9 +346,10 @@ export function partnerSuggestAlternative(
   return r;
 }
 
-export function partnerMarkUnavailable(requestId: string, reason?: string): AvailabilityRequest | null {
+export async function partnerMarkUnavailable(requestId: string, reason?: string): Promise<AvailabilityRequest | null> {
   const r = getAvailabilityRequest(requestId);
   if (!r) return null;
+  await partnerUnavailableOnServer(requestId, reason ?? "Dates not available");
   const now = new Date().toISOString();
   r.status = "REJECTED";
   r.partnerRespondedAt = now;
@@ -396,6 +416,10 @@ export function customerAcceptAlternative(requestId: string): AvailabilityReques
     requestId,
     title: "Payment pending",
     body: "Your accepted option is ready for payment.",
+  });
+
+  void acceptAlternativeOnServer(requestId).catch(() => {
+    /* keep local status if API is down */
   });
 
   return r;
@@ -621,4 +645,101 @@ export function listCustomerRequestsByContact(email: string, phone?: string): Av
     if (p && r.customerPhone.replace(/\D/g, "").endsWith(p)) return true;
     return false;
   });
+}
+
+export function mapServerAvailabilityStatus(
+  status: string,
+  local?: AvailabilityRequestStatus,
+): AvailabilityRequestStatus {
+  switch (status.toUpperCase()) {
+    case "REQUESTED":
+      return "REQUESTED";
+    case "ALTERNATIVE_OFFERED":
+      return "ALTERNATIVE_PROPOSED";
+    case "UNAVAILABLE":
+      return "REJECTED";
+    case "CONFIRMED":
+      if (local === "PAID" || local === "CONFIRMED" || local === "COMPLETED") return local;
+      return "PAYMENT_PENDING";
+    case "PAID":
+      return "PAID";
+    default:
+      return local ?? "REQUESTED";
+  }
+}
+
+function placeholderSnapshot(): PriceSnapshot {
+  return {
+    priceStatus: "ON_REQUEST",
+    baseAmount: null,
+    taxAmount: null,
+    taxDisplay: "not_confirmed",
+    totalAmount: null,
+    occupancy: "pending",
+    roomType: "",
+    durationNights: 7,
+    guests: 2,
+    currency: "INR",
+    label: "On request",
+    capturedAt: new Date().toISOString(),
+  };
+}
+
+export function mergeServerAvailability(item: ServerAvailability): AvailabilityRequest {
+  const existing = getAvailabilityRequest(item.publicId);
+  const status = mapServerAvailabilityStatus(item.status, existing?.status);
+  if (existing) {
+    existing.status = status;
+    if (item.finalAmountInr != null) existing.finalPayableAmount = item.finalAmountInr;
+    if (item.customerName) existing.customerName = item.customerName;
+    existing.updatedAt = new Date().toISOString();
+    upsert(existing);
+    return existing;
+  }
+
+  const now = item.requestedAt ?? new Date().toISOString();
+  const request: AvailabilityRequest = {
+    requestId: item.publicId,
+    customerId: null,
+    customerName: item.customerName ?? "Guest",
+    customerEmail: item.email ?? "",
+    customerPhone: item.phone ?? "",
+    countryCode: "+91",
+    retreatId: item.retreatSlug ?? "",
+    retreatName: item.retreatSlug ?? "Retreat",
+    programmeId: item.programmeSlug ?? "",
+    programmeName: item.programmeSlug ?? "Programme",
+    durationNights: 7,
+    durationUnit: "nights",
+    checkIn: "",
+    checkOut: "",
+    guests: 2,
+    occupancy: "",
+    roomType: "",
+    displayedPrice: "On request",
+    priceStatus: "ON_REQUEST",
+    priceSnapshot: placeholderSnapshot(),
+    finalPayableAmount: item.finalAmountInr ?? null,
+    settlementMode: "MARKETPLACE_SPLIT",
+    source: "listing",
+    customerNotes: "",
+    status,
+    alternative: null,
+    partnerConfirmation: null,
+    internalNotes: [],
+    auditTrail: [audit("system", item.status, "Synced from server")],
+    requestedAt: now,
+    partnerViewedAt: null,
+    partnerRespondedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    bookingId: null,
+    paymentMode: null,
+  };
+  upsert(request);
+  return request;
+}
+
+export function mergeServerAvailabilityList(items: ServerAvailability[]): void {
+  for (const item of items) mergeServerAvailability(item);
 }

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchPartnerQueue } from "../../lib/api/availability";
 import {
   isAgingRequest,
   listAvailabilityRequests,
   markPartnerViewed,
+  mergeServerAvailabilityList,
   partnerConfirmAvailability,
   partnerMarkUnavailable,
   partnerSuggestAlternative,
@@ -18,8 +20,18 @@ export function VendorDashboard() {
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [action, setAction] = useState<"confirm" | "alternative" | null>(null);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
-  const refresh = () => setRequests(listAvailabilityRequests());
+  const refresh = async () => {
+    setRequests(listAvailabilityRequests());
+    try {
+      mergeServerAvailabilityList(await fetchPartnerQueue());
+      setRequests(listAvailabilityRequests());
+      setQueueError(null);
+    } catch {
+      setQueueError("Could not load the partner queue from the server. Sign in as the partner on this browser.");
+    }
+  };
 
   useEffect(() => {
     refresh();
@@ -44,6 +56,7 @@ export function VendorDashboard() {
 
       <section id="availability-requests" className="bg-white rounded-xl border border-sand-200 p-6">
         <h2 className="font-semibold text-sage-800 mb-4">Pending Availability Requests</h2>
+        {queueError ? <p className="text-sm text-red-700 mb-3">{queueError}</p> : null}
         {pending.length === 0 ? (
           <p className="text-sm text-sage-500">No pending requests.</p>
         ) : (
@@ -101,9 +114,15 @@ export function VendorDashboard() {
                       type="button"
                       className="px-3 py-1.5 rounded-lg border border-sand-200 text-xs font-semibold text-red-700"
                       onClick={() => {
-                        partnerMarkUnavailable(r.requestId);
-                        refresh();
-                        setActiveId(null);
+                        void partnerMarkUnavailable(r.requestId)
+                          .then(() => {
+                            setQueueError(null);
+                            refresh();
+                            setActiveId(null);
+                          })
+                          .catch(() => {
+                            setQueueError("Could not mark unavailable on the server. Stay signed in as the partner.");
+                          });
                       }}
                     >
                       Unavailable
@@ -242,7 +261,7 @@ function ConfirmForm({
           onClick={() => {
             const amount = Number(finalAmount);
             if (!amount || amount <= 0) return;
-            partnerConfirmAvailability(request.requestId, {
+            void partnerConfirmAvailability(request.requestId, {
               programmeId: request.programmeId,
               programmeName: request.programmeName,
               checkIn: request.checkIn,
@@ -254,8 +273,13 @@ function ConfirmForm({
               finalAmount: amount,
               taxesNote,
               inclusionsNote,
-            });
-            onDone();
+            })
+              .then((updated) => {
+                if (updated) onDone();
+              })
+              .catch(() => {
+                window.alert("Confirm failed on the server. Sign in as partner or admin and try again.");
+              });
           }}
         >
           Confirm & send payment-ready
@@ -333,7 +357,7 @@ function AlternativeForm({
             const amount = Number(finalAmount);
             const durationNights = Number(nights);
             if (!checkIn || !checkOut || !durationNights) return;
-            partnerSuggestAlternative(request.requestId, {
+            void partnerSuggestAlternative(request.requestId, {
               programmeId: request.programmeId,
               programmeName: request.programmeName,
               checkIn,
@@ -345,8 +369,13 @@ function AlternativeForm({
               finalAmount: amount > 0 ? amount : null,
               taxesNote: "Taxes not yet confirmed",
               inclusionsNote: "",
-            });
-            onDone();
+            })
+              .then((updated) => {
+                if (updated) onDone();
+              })
+              .catch(() => {
+                window.alert("Could not send the alternative. Sign in as partner or admin and try again.");
+              });
           }}
         >
           Send alternative

@@ -1,4 +1,5 @@
 using Healingram.BuildingBlocks.Observability;
+using Healingram.Gateway;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
@@ -15,8 +16,17 @@ builder.Host.UseSerilog((ctx, _, config) =>
     }
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
+
 builder.Services.AddReverseProxy()
-    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+    .AddHealingramCorrelationTransforms();
 
 var otlp = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
 builder.Services.AddOpenTelemetry()
@@ -32,7 +42,11 @@ builder.Services.AddOpenTelemetry()
     });
 
 var app = builder.Build();
+app.UseCors();
 app.UseHealingramCorrelationId();
+app.UseHealingramCorrelationForward();
 app.MapGet("/api/gateway/health", () => Results.Ok(new { status = "ok", service = "gateway" }));
 app.MapReverseProxy();
 app.Run();
+
+public partial class Program;

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Heart, MapPin, BadgeCheck } from "lucide-react";
+import { MapPin, BadgeCheck } from "lucide-react";
 import {
   formatLaunchPrice,
   getRetreatDisplayTags,
@@ -7,9 +7,14 @@ import {
   type LaunchRetreat,
 } from "../data/launchSupply";
 import { getRetreatVerifiedFromPrice } from "../data/allRetreatsBrowse";
+import { WishlistButton } from "./WishlistButton";
 
 export function LaunchRetreatCard({ retreat }: { retreat: LaunchRetreat }) {
-  const regionLabel = LAUNCH_DESTINATIONS[retreat.region].regionLabel;
+  const regionLabel =
+    retreat.stateLabel ??
+    (retreat.region === "karnataka" || retreat.region === "kerala"
+      ? LAUNCH_DESTINATIONS[retreat.region].regionLabel
+      : retreat.region);
   const tags = getRetreatDisplayTags(retreat);
   const verifiedFrom = getRetreatVerifiedFromPrice(retreat.id);
   const priceLabel =
@@ -23,13 +28,7 @@ export function LaunchRetreatCard({ retreat }: { retreat: LaunchRetreat }) {
           alt={retreat.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        <button
-          type="button"
-          className="absolute top-3 right-3 p-2 bg-white/95 rounded-full hover:bg-white shadow-sm"
-          aria-label="Add to wishlist"
-        >
-          <Heart className="w-4 h-4 text-sage-600" />
-        </button>
+        <WishlistButton slug={retreat.id} />
         {retreat.mvpDemoVerified && (
           <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 bg-white/95 text-teal-700 text-[11px] font-semibold rounded-md shadow-sm">
             <BadgeCheck className="w-3.5 h-3.5" />

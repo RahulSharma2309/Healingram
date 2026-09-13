@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { SlidersHorizontal, X } from "lucide-react";
 import { LaunchRetreatCard } from "../../components/LaunchRetreatCard";
+import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
 import {
   activeFilterChips,
   browseStateToSearchParams,
@@ -20,13 +21,13 @@ import {
 } from "../../data/allRetreatsBrowse";
 
 /**
- * `/retreats` — All Retreats discovery from launch inventory only.
- * Filters: need, location, duration (+ contextual counts). No legacy OTA filters.
+ * `/retreats` — published catalog from the gateway. Empty if the API is down.
  */
 export function RetreatList() {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseBrowseStateFromParams(params), [params]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { retreats: inventory, places, source } = usePublishedRetreats();
 
   const setState = (patch: Partial<AllRetreatsBrowseState>) => {
     const next: AllRetreatsBrowseState = { ...state, ...patch };
@@ -57,20 +58,53 @@ export function RetreatList() {
     });
   };
 
-  const needOptions = useMemo(() => getNeedOptionsWithCounts(state), [state]);
-  const locationGroups = useMemo(() => getLocationOptionsWithCounts(state), [state]);
-  const durationOptions = useMemo(() => getDurationOptionsWithCounts(state), [state]);
+  const needOptions = useMemo(
+    () => getNeedOptionsWithCounts(state, inventory),
+    [state, inventory],
+  );
+  const locationGroups = useMemo(() => {
+    if (source === "api" && places.length > 0) {
+      return places.map((group) => ({
+        region: group.slug,
+        regionLabel: group.label,
+        options: [
+          {
+            id: `region:${group.slug}`,
+            label: `All ${group.label}`,
+            region: group.slug,
+            locality: null,
+            count: group.cities.reduce((sum, city) => sum + city.count, 0),
+          },
+          ...group.cities.map((city) => ({
+            id: city.slug,
+            label: city.label,
+            region: group.slug,
+            locality: city.label,
+            count: city.count,
+          })),
+        ],
+      }));
+    }
+    return getLocationOptionsWithCounts(state, inventory);
+  }, [source, places, state, inventory]);
+  const durationOptions = useMemo(
+    () => getDurationOptionsWithCounts(state, inventory),
+    [state, inventory],
+  );
 
   const programmes = useMemo(() => programmesForNeeds(state.needs), [state.needs]);
 
   const results = useMemo(() => {
-    const filtered = filterBrowseRetreats({
-      needs: state.needs,
-      locations: state.locations,
-      durations: state.durations,
-    });
+    const filtered = filterBrowseRetreats(
+      {
+        needs: state.needs,
+        locations: state.locations,
+        durations: state.durations,
+      },
+      inventory,
+    );
     return sortBrowseRetreats(filtered, state.sort, programmes.length ? programmes : null);
-  }, [state, programmes]);
+  }, [state, programmes, inventory]);
 
   const chips = useMemo(() => activeFilterChips(state), [state]);
   const activeCount = countActiveFilters(state);
@@ -174,12 +208,31 @@ export function RetreatList() {
     </div>
   );
 
+  if (source === "loading") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <p className="text-sage-600">Loading published retreats from the catalog…</p>
+      </div>
+    );
+  }
+
+  if (source === "error") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800 mb-3">Catalog unavailable</h1>
+        <p className="text-sage-600 max-w-lg mx-auto">
+          The site is not showing local dummy retreats. Start Healingram.Gateway on port 5000 and
+          Healingram.Api on port 5080, then refresh.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
       <h1 className="font-display text-3xl font-bold text-sage-800 mb-2">All retreats</h1>
       <p className="text-sage-600 mb-6 max-w-2xl">
-        Healingram’s launch partners in Karnataka and Kerala — programmes with stay, not hotel
-        room rates.
+        Published programmes with stay — not hotel room rates. Locations come from inventory.
       </p>
 
       <div className="flex flex-col lg:flex-row gap-8">

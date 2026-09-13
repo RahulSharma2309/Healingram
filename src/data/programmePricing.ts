@@ -66,6 +66,15 @@ const PROGRAMME_DURATION_DEFAULTS: Partial<Record<LaunchProgrammeTheme | "genera
   general: [7],
 };
 
+export function defaultNightsForThemes(themes: LaunchProgrammeTheme[]): number[] {
+  const nights = new Set<number>();
+  const list = themes.length > 0 ? themes : (["general"] as const);
+  for (const theme of list) {
+    for (const n of PROGRAMME_DURATION_DEFAULTS[theme] ?? [7]) nights.add(n);
+  }
+  return [...nights].sort((a, b) => a - b);
+}
+
 const PROGRAMME_NAMES: Record<string, string> = {
   ...LAUNCH_PROGRAMME_LABELS,
   weekend: "Weekend wellness",

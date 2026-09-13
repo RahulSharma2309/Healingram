@@ -21,6 +21,7 @@ import { Blog } from "./pages/customer/Blog";
 import { VendorDashboard } from "./pages/vendor/VendorDashboard";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AvailabilityRequestReceived } from "./pages/customer/AvailabilityRequestReceived";
+import { MyRequest } from "./pages/customer/MyRequest";
 import { MyAvailabilityRequest } from "./pages/customer/MyAvailabilityRequest";
 import { PaymentReady } from "./pages/customer/PaymentReady";
 
@@ -45,7 +46,9 @@ export default function App() {
           <Route path="login" element={<Login />} />
           <Route path="signup" element={<Signup />} />
           <Route path="dashboard" element={<UserDashboard />} />
+          <Route path="my-request" element={<MyRequest />} />
           <Route path="requests/:requestId/received" element={<AvailabilityRequestReceived />} />
+          <Route path="requests/:requestId/verify" element={<MyRequest />} />
           <Route path="requests/:requestId/payment" element={<PaymentReady />} />
           <Route path="requests/:requestId" element={<MyAvailabilityRequest />} />
           <Route path="checkout/:id" element={<Checkout />} />

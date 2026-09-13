@@ -1,31 +1,29 @@
 ---
-description: Healingram V1 delivery — agents, branch, CI, and definition of done
+description: Healingram V1 delivery — agents, docs, and definition of done
 alwaysApply: true
 ---
 
 # Healingram V1 delivery
 
-This repo is the V1 enterprise build of Healingram (programme-led retreat marketplace).
+Programme-led retreat marketplace. Living docs: `docs/README.md`.
 
 ## Agents
 
-- Product Owner: `.cursor/skills/healingram-product-owner/SKILL.md` — backlog, flows, prerequisites, UAT
-- Software Developer: `.cursor/skills/healingram-software-developer/SKILL.md` — implement one story
-- QA: `.cursor/skills/healingram-qa/SKILL.md` — story test + evidence
+Load the matching skill before that role’s work:
 
-Load the matching skill before doing that role’s work.
+- PO: `.cursor/skills/healingram-product-owner/SKILL.md`
+- Developer: `.cursor/skills/healingram-software-developer/SKILL.md`
+- QA: `.cursor/skills/healingram-qa/SKILL.md`
+- QA+PO UAT: `.cursor/skills/healingram-qa-po-uat/SKILL.md`
 
-## Branching
+## Docs win
 
-- Iteration branch: `feature/v1-iteration-1`
-- Story branch: `story/STORY-XX-YY-ZZ-short-slug` from the iteration branch
-- PR target: `feature/v1-iteration-1`
-- `main` receives the finished iteration later, not story-by-story
+`docs/po-flows/` (product), `docs/technical-flows/` (APIs/tables), `docs/engineering/` (deploy/cost).  
+`Healingram_Developer_Functional_Specification_V1.docx` for original V1 behaviour.  
+Human overrides: inventory-driven geography, published inventory as the ceiling, local UAT first, no create-retreat CMS, **webhook-only paid**.
 
-## Done means
+Modular monolith, not microservices.
 
-Developer (code + unit tests) → CI green → QA passed → PO UAT passed.
+## Done
 
-## Spec wins
-
-`Healingram_Developer_Functional_Specification_V1.docx` and `docs/` beat the old prototype and `BACKEND_SPRINT_PLAYBOOK.md` where they conflict. Modular monolith, not microservices, for this iteration.
+Code + tests → CI green → cases in `docs/test-cases/` → human click on localhost.
