@@ -113,7 +113,7 @@ public class TripAndPartnerQueueTests
         Assert.Equal(b.Entity.PublicId, tripsB.PaymentPending[0].PublicId);
         Assert.DoesNotContain(storedA, i => i.PublicId == b.Entity.PublicId);
         Assert.DoesNotContain(storedA, i => i.CustomerUserId is null);
-        Assert.Null(guestRow.Entity.CustomerUserId);
+        Assert.Equal(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), guestRow.Entity.CustomerUserId);
     }
 
     [Fact]

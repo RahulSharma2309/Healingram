@@ -27,8 +27,11 @@ internal static class AvailabilityEndpoints
         requests.MapGet("/{publicId}", (
             string publicId,
             AvailabilityService service,
+            ClaimsPrincipal user,
             CancellationToken cancellationToken)
-            => Handle(service.GetAsync(publicId, includeInternalNotes: false, cancellationToken), includeNotes: false));
+            => Handle(
+                service.GetAsync(publicId, ActorOf(user), includeInternalNotes: false, cancellationToken),
+                includeNotes: false));
 
         requests.MapPost("/{publicId}/confirm", (
             string publicId,
@@ -65,6 +68,24 @@ internal static class AvailabilityEndpoints
             ClaimsPrincipal user,
             CancellationToken cancellationToken)
             => Handle(service.AcceptAlternativeAsync(publicId, ActorOf(user), cancellationToken), includeNotes: false));
+
+        app.MapGet("/api/availability/mine", async (
+            AvailabilityService service,
+            ClaimsPrincipal user,
+            CancellationToken cancellationToken) =>
+        {
+            var actor = ActorOf(user);
+            if (actor.UserId is null)
+            {
+                return Results.Json(
+                    new { error = "Verify it's you to view your requests", details = Array.Empty<string>() },
+                    Json,
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            var items = await service.ListMineAsync(actor.UserId.Value, cancellationToken);
+            return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: false)) }, Json);
+        }).RequireAuthorization().WithTags("Availability");
 
         app.MapGet("/api/trips", async (
             AvailabilityService service,
@@ -128,6 +149,8 @@ internal static class AvailabilityEndpoints
                 => Results.Json(new { error = result.Error, details = result.Details ?? [] }, Json, statusCode: StatusCodes.Status409Conflict),
             AvailabilityOutcomeKind.Forbidden
                 => Results.Json(new { error = result.Error, details = result.Details ?? [] }, Json, statusCode: StatusCodes.Status403Forbidden),
+            AvailabilityOutcomeKind.Unauthorized
+                => Results.Json(new { error = result.Error, details = result.Details ?? [] }, Json, statusCode: StatusCodes.Status401Unauthorized),
             _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
     }

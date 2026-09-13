@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Calendar, Heart, User } from "lucide-react";
 import { fetchTrips } from "../../lib/api/account";
 import {
@@ -12,6 +12,7 @@ import { formatDisplayDate } from "../../lib/pricing";
 import { formatInr } from "../../data/programmePricing";
 import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
 import { getCustomerProfile, isLoggedIn } from "../../lib/auth";
+import { ProfileDetails } from "./ProfileDetails";
 import { hydrateWishlistFromServer, listWishlistSlugs, subscribeWishlist, toggleWishlist } from "../../lib/wishlist";
 
 type Tab = "trips" | "requests" | "wishlist" | "profile";
@@ -39,14 +40,11 @@ export function UserDashboard() {
     const refresh = () => {
       const all = listAvailabilityRequests();
       const profile = getCustomerProfile();
-      const mine = isLoggedIn()
-        ? all.filter(
-            (r) =>
-              (profile.email &&
-                r.customerEmail.toLowerCase() === profile.email.toLowerCase()) ||
-              r.customerName === profile.name,
-          )
-        : all;
+      const mine = all.filter(
+        (r) =>
+          (profile.email && r.customerEmail.toLowerCase() === profile.email.toLowerCase()) ||
+          r.customerName === profile.name,
+      );
       setRequests(mine);
       setTrips(
         listCustomerTrips().filter((r) =>
@@ -56,6 +54,11 @@ export function UserDashboard() {
       setWishSlugs(listWishlistSlugs());
     };
     refresh();
+    if (!isLoggedIn()) {
+      return () => {
+        window.removeEventListener("healingram-requests", refresh);
+      };
+    }
     void hydrateWishlistFromServer().then(() => setWishSlugs(listWishlistSlugs()));
     void fetchTrips()
       .then((groups) => {
@@ -88,6 +91,10 @@ export function UserDashboard() {
     };
   }, []);
 
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />;
+  }
+
   const tabs: { id: Tab; label: string; icon: typeof Calendar }[] = [
     { id: "requests", label: "Requests", icon: Calendar },
     { id: "trips", label: "My Trips", icon: Calendar },
@@ -100,16 +107,15 @@ export function UserDashboard() {
       <h1 className="font-display text-2xl font-bold text-sage-800 mb-6">My dashboard</h1>
       <div className="flex gap-2 mb-8 border-b border-sand-200 overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon }) => (
-          <button
+          <Link
             key={id}
-            type="button"
-            onClick={() => setTab(id)}
+            to={`/dashboard?tab=${id}`}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
               tab === id ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500"
             }`}
           >
             <Icon className="w-4 h-4" /> {label}
-          </button>
+          </Link>
         ))}
       </div>
 
@@ -224,15 +230,7 @@ export function UserDashboard() {
         </div>
       )}
 
-      {tab === "profile" && (
-        <div className="bg-white rounded-xl border border-sand-200 p-6 text-sm text-sage-700">
-          <p>Name: {getCustomerProfile().name || "—"}</p>
-          <p className="mt-1">Email: {getCustomerProfile().email || "—"}</p>
-          <p className="mt-1">
-            Phone: {getCustomerProfile().countryCode} {getCustomerProfile().phone || "—"}
-          </p>
-        </div>
-      )}
+      {tab === "profile" && <ProfileDetails />}
     </div>
   );
 }

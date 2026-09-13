@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Healingram.BuildingBlocks.Modules;
+using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Auth;
 using Healingram.Modules.Identity.Data;
 using Healingram.Modules.Identity.Wishlist;
@@ -28,6 +29,7 @@ public sealed class IdentityModule : IAppModule
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IIdentityStore, PostgresIdentityStore>();
+        services.AddScoped<IGuestIdentityPort, GuestIdentityAdapter>();
         services.AddScoped<AuthService>();
         services.AddScoped<WishlistService>();
         services.AddHostedService<IdentitySeedHostedService>();

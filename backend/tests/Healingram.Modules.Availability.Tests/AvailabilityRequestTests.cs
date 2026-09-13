@@ -135,7 +135,11 @@ public class AvailabilityRequestTests
             AvailabilityHarness.Admin,
             CancellationToken.None);
 
-        var loaded = (await service.GetAsync(created.Entity.PublicId, includeInternalNotes: true, CancellationToken.None)).Entity!;
+        var loaded = (await service.GetAsync(
+            created.Entity.PublicId,
+            AvailabilityHarness.Admin,
+            includeInternalNotes: true,
+            CancellationToken.None)).Entity!;
         var guestJson = JsonSerializer.Serialize(AvailabilityEndpoints.ToDto(loaded, includeNotes: false));
         Assert.DoesNotContain("internal follow-up", guestJson, StringComparison.Ordinal);
         Assert.DoesNotContain("internalNotes", guestJson, StringComparison.Ordinal);

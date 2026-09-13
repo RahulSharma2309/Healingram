@@ -18,17 +18,24 @@ Role after login: `homePathForRole` → `/dashboard` · `/vendor` · `/admin`.
 
 | Method | Path | Auth | Body / result |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | no | `{ email, password, fullName }` → tokens + user. Role forced to `customer` |
+| POST | `/api/auth/register` | no | `{ firstName, lastName, phone, email, password, confirmPassword, address? }` → tokens + user. Role forced to `customer`. Address optional. |
 | POST | `/api/auth/login` | no | `{ email, password }` → `{ accessToken, refreshToken, user }` |
 | POST | `/api/auth/refresh` | no | `{ refreshToken }` |
 | POST | `/api/auth/logout` | no | revokes refresh |
-| GET | `/api/users/me` | Bearer | current user or 401 |
+| GET | `/api/users/me` | Bearer | `{ id, email, fullName, role, firstName, lastName, phone, address }` |
+| PATCH | `/api/users/me` | Bearer | `{ firstName, lastName, phone, email, address? }` → same user shape. No password change. |
+
+The signup form validates every field at once on **Sign up** and does not call the API until the form is clean. The server repeats the same rules.
+
+Register and profile reject: missing names; phone that is not exactly 10 digits starting 6–9; missing or invalid email (`name@example.com`); address over 200 characters; a new password that is not at least 8 characters with a letter, a number, and a special character; or confirm password mismatch. Duplicate email is 409.
+
+The phone field is India-only (`+91` shown, not editable). The guest types 10 digits. `identity.users.phone_e164` stores country code + number (`+91` + 10 digits). The user payload also returns `phoneCountryCode: "+91"`. `fullName` is first + last.
 
 ## Tables
 
 | Table | Role |
 | --- | --- |
-| `identity.users` | id, email, full name, role (`customer` / `partner` / `admin`) |
+| `identity.users` | id, email, first_name, last_name, phone_e164, address, full_name, role (`customer` / `partner` / `admin`) |
 | `identity.credentials` | password hash (not the raw password) |
 | `identity.refresh_tokens` | rotatable refresh; logout revokes |
 

@@ -11,6 +11,8 @@ Healingram is a **programme-led retreat marketplace**. A guest does not buy a ho
 | [engineering/](engineering/) | You as founder-engineer | Stack, deploy, security, scale, **cost** |
 | [test-cases/](test-cases/) | You testing locally | Cases you can tick pass/fail |
 | [how-we-built-it/](how-we-built-it/) | You learning agents | How this app was built with Cursor agents, and how to do the next one |
+| [leadership-review.md](leadership-review.md) | You as founder before deploy | CEO + CPO + CTO critique: **NO-GO** until P0 bugs are closed |
+| [blockers-in-plain-english.md](blockers-in-plain-english.md) | You wanting the short version | Each blocker in easy English — laptop-intended or a mistake |
 
 Written spec (binary): `Healingram_Developer_Functional_Specification_V1.docx` at the repo root.  
 Human overrides that beat that spec: inventory-driven geography, published inventory as the ceiling, local UAT first, no create-retreat CMS in V1.

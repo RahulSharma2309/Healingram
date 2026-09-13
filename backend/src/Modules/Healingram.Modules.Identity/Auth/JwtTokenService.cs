@@ -29,7 +29,8 @@ internal sealed class JwtTokenService(JwtSettings settings, TimeProvider clock) 
             new("email", user.Email),
             new("name", user.FullName ?? user.Email),
             new("role", user.Role),
-            new(ClaimTypes.Role, user.Role)
+            new(ClaimTypes.Role, user.Role),
+            new("account_status", user.AccountStatus)
         };
 
         var token = new JwtSecurityToken(

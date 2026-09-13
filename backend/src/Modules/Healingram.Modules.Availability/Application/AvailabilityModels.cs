@@ -73,7 +73,8 @@ internal enum AvailabilityOutcomeKind
     Validation,
     NotFound,
     IllegalTransition,
-    Forbidden
+    Forbidden,
+    Unauthorized
 }
 
 internal sealed record AvailabilityOutcome(
@@ -105,6 +106,9 @@ internal sealed record AvailabilityOutcome(
 
     public static AvailabilityOutcome Deny(string detail)
         => new(AvailabilityOutcomeKind.Forbidden, Error: "Forbidden", Details: [detail]);
+
+    public static AvailabilityOutcome Unauth(string detail)
+        => new(AvailabilityOutcomeKind.Unauthorized, Error: detail, Details: [detail]);
 }
 
 internal sealed class DuplicateIdempotencyException : Exception;

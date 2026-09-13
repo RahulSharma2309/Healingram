@@ -1,7 +1,7 @@
-import { FormEvent, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authErrorMessage, loginWithPassword } from "../../lib/api/auth";
-import { homePathForRole, logIn } from "../../lib/auth";
+import { applyAuthUser, homePathForRole } from "../../lib/auth";
 
 export function Login() {
   const navigate = useNavigate();
@@ -16,10 +16,7 @@ export function Login() {
     setError(null);
     try {
       const session = await loginWithPassword(email.trim(), password);
-      logIn(session.user.fullName || session.user.email, {
-        email: session.user.email,
-        role: session.user.role,
-      });
+      applyAuthUser(session.user);
       navigate(homePathForRole(session.user.role));
     } catch (err) {
       setError(authErrorMessage(err));

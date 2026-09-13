@@ -42,6 +42,16 @@ internal sealed class FakePartnerAccess : IPartnerAccess
         => Task.FromResult(_byUser.TryGetValue(userId, out var slugs) ? slugs : DefaultSlugs);
 }
 
+internal sealed class FakeGuestIdentityPort(Guid customerId) : IGuestIdentityPort
+{
+    public Task<Guid> EnsureCustomerAsync(
+        string email,
+        string phoneE164,
+        string displayName,
+        CancellationToken cancellationToken)
+        => Task.FromResult(customerId);
+}
+
 internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
 {
     public HashSet<string> PaidPublicIds { get; } = new(StringComparer.Ordinal);
@@ -85,6 +95,9 @@ internal static class AvailabilityHarness
     public const string PublishedSlug = "published-retreat";
 
     public static AvailabilityFixture Create(params string[] catalogSlugs)
+        => Create(Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), catalogSlugs);
+
+    public static AvailabilityFixture Create(Guid guestCustomerId, params string[] catalogSlugs)
     {
         var slugs = catalogSlugs.Length == 0 ? new[] { PublishedSlug } : catalogSlugs;
         var store = new InMemoryAvailabilityStore();
@@ -97,6 +110,7 @@ internal static class AvailabilityHarness
             bookings,
             payments,
             partners,
+            new FakeGuestIdentityPort(guestCustomerId),
             TimeProvider.System,
             NullLogger<AvailabilityService>.Instance);
         return new AvailabilityFixture
@@ -122,7 +136,7 @@ internal static class AvailabilityHarness
         string phone = "+919876543210")
         => new(key, retreat, programme, nights, occupancy, guests, checkIn, name, email, phone);
 
-    public static Actor Customer => new(Roles.Customer, Guid.NewGuid());
-    public static Actor Partner => new(Roles.Partner, Guid.NewGuid());
-    public static Actor Admin => new(Roles.Admin, Guid.NewGuid());
+    public static Actor Customer { get; } = new(Roles.Customer, Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"));
+    public static Actor Partner { get; } = new(Roles.Partner, Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"));
+    public static Actor Admin { get; } = new(Roles.Admin, Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd"));
 }

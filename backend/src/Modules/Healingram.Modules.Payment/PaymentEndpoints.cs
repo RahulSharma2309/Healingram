@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using System.Text.Json;
+using Healingram.Contracts.Identity;
 using Healingram.Modules.Payment.Application;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -14,11 +16,22 @@ internal static class PaymentEndpoints
     {
         var payment = app.MapGroup("/api/payment").WithTags("Payment");
 
-        payment.MapPost("/intents", (
+        payment.MapPost("/intents", async (
             CreatePaymentIntentRequest body,
+            ClaimsPrincipal user,
             PaymentService service,
-            CancellationToken cancellationToken)
-            => Handle(service.CreateIntentAsync(body, cancellationToken)));
+            CancellationToken cancellationToken) =>
+        {
+            if (IsGuestAccount(user))
+            {
+                return Results.Json(
+                    new { error = "Create an account to continue to payment", details = Array.Empty<string>() },
+                    Json,
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            return await Handle(service.CreateIntentAsync(body, cancellationToken));
+        }).RequireAuthorization();
 
         payment.MapGet("/intents/{id:guid}", (
             Guid id,
@@ -62,6 +75,12 @@ internal static class PaymentEndpoints
             _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
         };
     }
+
+    private static bool IsGuestAccount(ClaimsPrincipal user)
+        => string.Equals(
+            user.FindFirstValue("account_status"),
+            AccountStatuses.Guest,
+            StringComparison.OrdinalIgnoreCase);
 
     internal static object ToDto(PaymentIntentEntity entity)
         => new

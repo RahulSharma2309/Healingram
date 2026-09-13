@@ -21,6 +21,10 @@ internal static class AuthEndpoints
             => Handle(() => service.RefreshAsync(body, ct)));
         auth.MapPost("/logout", (LogoutRequest? body, AuthService service, CancellationToken ct)
             => Handle(() => service.LogoutAsync(body ?? new LogoutRequest(null), ct)));
+        auth.MapPost("/guest/verify-start", (GuestVerifyStartRequest body, AuthService service, CancellationToken ct)
+            => Handle(() => service.StartGuestVerificationAsync(body, ct)));
+        auth.MapPost("/guest/verify", (GuestVerifyRequest body, AuthService service, CancellationToken ct)
+            => Handle(() => service.VerifyGuestAsync(body, ct)));
 
         app.MapGet("/api/users/me", async (ClaimsPrincipal principal, AuthService service, CancellationToken ct) =>
         {
@@ -30,6 +34,20 @@ internal static class AuthEndpoints
             }
 
             return AuthHttp.From(await service.GetCurrentUserAsync(userId, ct));
+        }).RequireAuthorization().WithTags("Users");
+
+        app.MapPatch("/api/users/me", async (
+            ClaimsPrincipal principal,
+            UpdateProfileRequest body,
+            AuthService service,
+            CancellationToken ct) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+            {
+                return AuthHttp.Unauthorized("Unauthorized");
+            }
+
+            return AuthHttp.From(await service.UpdateProfileAsync(userId, body, ct));
         }).RequireAuthorization().WithTags("Users");
     }
 
@@ -49,6 +67,8 @@ internal static class AuthEndpoints
         {
             AuthStatus.Ok when result.Tokens is not null => Results.Ok(result.Tokens),
             AuthStatus.Ok when result.User is not null => Results.Ok(result.User),
+            AuthStatus.Ok => Results.Ok(new { sent = true }),
+            AuthStatus.NoMatch => Results.Ok(new { matched = false }),
             AuthStatus.Created when result.Tokens is not null => Results.Created("/api/users/me", result.Tokens),
             AuthStatus.NoContent => Results.NoContent(),
             AuthStatus.Validation => Results.Json(

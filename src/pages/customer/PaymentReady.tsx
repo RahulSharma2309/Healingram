@@ -1,7 +1,9 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Shield } from "lucide-react";
+import { ApiError } from "../../lib/api/client";
 import { getAvailabilityByPublicId } from "../../lib/api/availability";
+import { isRegisteredAccount } from "../../lib/auth";
 import {
   applyPaymentWebhook,
   getAvailabilityRequest,
@@ -14,6 +16,7 @@ import { rememberedIntentId, refreshIntentStatus, startPlaceholderCheckout } fro
 
 export function PaymentReady() {
   const { requestId } = useParams();
+  const navigate = useNavigate();
   const [request, setRequest] = useState<AvailabilityRequest | undefined>();
   const [lookup, setLookup] = useState<"loading" | "ready" | "missing">("loading");
   const [message, setMessage] = useState<string | null>(null);
@@ -39,7 +42,11 @@ export function PaymentReady() {
         setRequest(mergeServerAvailability(dto));
         setLookup("ready");
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          navigate(`/requests/${requestId}/verify`, { replace: true });
+          return;
+        }
         setLookup(getAvailabilityRequest(requestId) ? "ready" : "missing");
       });
 
@@ -176,6 +183,21 @@ export function PaymentReady() {
         </p>
       </div>
 
+      {!isRegisteredAccount() ? (
+        <div className="mt-6 rounded-2xl border border-sand-200 bg-sand-50 p-5">
+          <h2 className="font-display text-lg font-semibold text-sage-800">Create your Healingram account</h2>
+          <p className="mt-2 text-sm text-sage-600">
+            Your retreat confirmed. Create an account to continue to payment. This keeps the same request —
+            you will not start over.
+          </p>
+          <Link
+            to={`/signup?next=${encodeURIComponent(`/requests/${request.requestId}/payment`)}`}
+            className="mt-4 inline-flex rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-500"
+          >
+            Create account
+          </Link>
+        </div>
+      ) : (
       <button
         type="button"
         disabled={total == null || submitting}
@@ -190,6 +212,7 @@ export function PaymentReady() {
       >
         {total != null ? `Pay ${formatInr(total)} securely` : "Payment amount not confirmed"}
       </button>
+      )}
       <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-sage-500">
         <Shield className="w-3.5 h-3.5" />
         No payment is marked complete until a verified provider webhook confirms it.

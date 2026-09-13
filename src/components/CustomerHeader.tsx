@@ -346,7 +346,7 @@ function AccountDropdown({
   return (
     <div
       ref={rootRef}
-      className="relative"
+      className="relative inline-flex items-center gap-0.5"
       onMouseEnter={() => {
         if (closeTimer.current != null) window.clearTimeout(closeTimer.current);
         onOpen();
@@ -355,26 +355,41 @@ function AccountDropdown({
         closeTimer.current = window.setTimeout(() => onClose(), 160);
       }}
     >
-      <button
-        type="button"
+      <Link
+        to="/dashboard?tab=profile"
         className={`inline-flex items-center gap-2 text-sm font-medium ${
           open ? "text-teal-600" : "text-gray-600 hover:text-sage-800"
         }`}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-controls={id}
-        onClick={() => (open ? onClose() : onOpen())}
+        aria-label="Profile"
+        onClick={onClose}
       >
         <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-700 inline-flex items-center justify-center">
           <User className="w-4 h-4" />
         </span>
         <span className="max-w-[7rem] truncate">{userName}</span>
+      </Link>
+      <button
+        type="button"
+        className={`inline-flex items-center ${open ? "text-teal-600" : "text-gray-600 hover:text-sage-800"}`}
+        aria-label="Account menu"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={id}
+        onClick={() => (open ? onClose() : onOpen())}
+      >
         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div id={id} role="menu" className="absolute right-0 top-full pt-2 z-50">
           <div className="min-w-[220px] rounded-xl border border-sand-200 bg-white py-2 shadow-lg">
-            <p className="px-4 py-2 text-xs text-gray-400">Account menu — awaiting Tab 11 spec</p>
+            <Link
+              to="/dashboard?tab=profile"
+              role="menuitem"
+              className="block px-4 py-2.5 text-sm text-sage-800 hover:bg-sand-50"
+              onClick={onClose}
+            >
+              Profile
+            </Link>
             <button
               type="button"
               role="menuitem"
@@ -439,11 +454,18 @@ export function CustomerHeader() {
     closeAll();
   };
 
+  const myRequestTo = loggedIn ? "/dashboard?tab=requests" : "/my-request";
+  const myRequestLink = (
+    <Link to={myRequestTo} className="text-sm font-medium text-gray-600 hover:text-sage-800">
+      My Request
+    </Link>
+  );
+
   let desktopActions: ReactNode;
   if (loggedIn) {
     desktopActions = (
       <>
-        {/* Item 11 — shell until Tab 11 spec */}
+        {myRequestLink}
         <Link
           to="/dashboard?tab=trips"
           className="text-sm font-medium text-gray-600 hover:text-sage-800"
@@ -451,7 +473,7 @@ export function CustomerHeader() {
           My Trips
         </Link>
         <Link
-          to="/dashboard"
+          to="/dashboard?tab=wishlist"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-sage-800"
           data-header-item={item6.id}
         >
@@ -469,14 +491,7 @@ export function CustomerHeader() {
   } else {
     desktopActions = (
       <>
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-sage-800"
-          data-header-item={item6.id}
-        >
-          <Heart className="w-4 h-4" />
-          {item6.label}
-        </Link>
+        {myRequestLink}
         <Link
           to="/login"
           className="text-sm font-medium text-gray-600 hover:text-sage-800"
@@ -589,15 +604,25 @@ export function CustomerHeader() {
         </div>
 
         <div className="flex lg:hidden items-center gap-1 ml-auto">
-          <Link
-            to="/dashboard"
-            className="p-2 rounded-lg hover:bg-sand-100"
-            aria-label={item6.label}
-            onClick={closeMobile}
-            data-header-item={item6.id}
-          >
-            <Heart className="w-5 h-5 text-sage-700" />
-          </Link>
+          {loggedIn ? (
+            <Link
+              to="/dashboard?tab=wishlist"
+              className="p-2 rounded-lg hover:bg-sand-100"
+              aria-label={item6.label}
+              onClick={closeMobile}
+              data-header-item={item6.id}
+            >
+              <Heart className="w-5 h-5 text-sage-700" />
+            </Link>
+          ) : (
+            <Link
+              to={myRequestTo}
+              className="px-2 py-1 text-sm font-medium text-sage-800"
+              onClick={closeMobile}
+            >
+              My Request
+            </Link>
+          )}
           <Link
             to="/contact"
             className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-500"
@@ -646,25 +671,52 @@ export function CustomerHeader() {
             mobile
           />
           <Link
-            to="/dashboard"
+            to={myRequestTo}
             onClick={closeMobile}
             className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
-            data-header-item={item6.id}
           >
-            {item6.label}
+            My Request
           </Link>
           {loggedIn ? (
-            <button
-              type="button"
-              className="w-full text-left py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
-              onClick={() => {
-                logOut();
-                closeMobile();
-                navigate("/");
-              }}
+            <Link
+              to="/dashboard?tab=trips"
+              onClick={closeMobile}
+              className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
             >
-              Log out
-            </button>
+              My Trips
+            </Link>
+          ) : null}
+          {loggedIn ? (
+            <Link
+              to="/dashboard?tab=wishlist"
+              onClick={closeMobile}
+              className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+              data-header-item={item6.id}
+            >
+              {item6.label}
+            </Link>
+          ) : null}
+          {loggedIn ? (
+            <>
+              <Link
+                to="/dashboard?tab=profile"
+                onClick={closeMobile}
+                className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+              >
+                Profile
+              </Link>
+              <button
+                type="button"
+                className="w-full text-left py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+                onClick={() => {
+                  logOut();
+                  closeMobile();
+                  navigate("/");
+                }}
+              >
+                Log out
+              </button>
+            </>
           ) : (
             <Link
               to="/login"

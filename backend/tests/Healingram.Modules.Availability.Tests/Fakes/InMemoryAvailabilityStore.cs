@@ -8,6 +8,8 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
     private readonly List<AvailabilityRequestEntity> _items = [];
     private long _sequence = 10000;
 
+    public IReadOnlyList<AvailabilityRequestEntity> Items => _items;
+
     public Task<AvailabilityRequestEntity?> FindByIdempotencyKeyAsync(string key, CancellationToken cancellationToken)
         => Task.FromResult(_items.FirstOrDefault(i => i.IdempotencyKey == key));
 

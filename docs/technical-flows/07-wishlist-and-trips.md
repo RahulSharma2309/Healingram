@@ -25,6 +25,6 @@ Availability lists that user’s `availability.requests`, then asks the **bookin
 | `completed` | Always empty in V1 |
 | `cancelled` | Availability `UNAVAILABLE` |
 
-If the guest created the request **without** a token, `customer_user_id` is null and the row **never appears** on My Trips. Login first, then request.
+Guest submits still get a `customer_user_id` (guest identity). After they verify with the stand-in code or create an account on that email/phone, My Trips lists those rows.
 
 Frontend: `src/lib/api/account.ts`, dashboard tab `?tab=trips`.

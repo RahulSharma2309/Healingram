@@ -13,10 +13,10 @@ public class DuplicateEmailTests
         var service = CreateService();
 
         var first = await service.RegisterAsync(
-            new RegisterRequest("guest@local.test", "Local123!", "First", "admin"),
+            new RegisterRequest("guest@local.test", "Local123!", null, "admin", "First", "Guest", "9876543210", "Local123!"),
             CancellationToken.None);
         var second = await service.RegisterAsync(
-            new RegisterRequest("Guest@local.test", "Local123!", "Second", "partner"),
+            new RegisterRequest("Guest@local.test", "Local123!", null, "partner", "Second", "Guest", "9988776655", "Local123!"),
             CancellationToken.None);
 
         Assert.Equal(AuthStatus.Created, first.Status);

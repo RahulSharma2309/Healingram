@@ -8,6 +8,12 @@ export type AuthUser = {
   email: string;
   fullName: string | null;
   role: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  phoneCountryCode?: string | null;
+  accountStatus?: string | null;
 };
 
 export type TokenResponse = {
@@ -53,9 +59,13 @@ export async function loginWithPassword(email: string, password: string): Promis
 }
 
 export async function registerAccount(input: {
+  firstName: string;
+  lastName: string;
+  phone: string;
   email: string;
   password: string;
-  fullName: string;
+  confirmPassword: string;
+  address?: string;
 }): Promise<TokenResponse> {
   const tokens = await apiFetch<TokenResponse>("/api/auth/register", {
     method: "POST",
@@ -64,6 +74,56 @@ export async function registerAccount(input: {
   persistSession(tokens);
   await mergeWishlistOnLogin();
   return tokens;
+}
+
+export const LOCAL_GUEST_CODE = "560142";
+
+export async function startGuestVerification(input: {
+  email?: string;
+  phone?: string;
+  channel: "email" | "phone";
+}): Promise<void> {
+  await apiFetch("/api/auth/guest/verify-start", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function verifyGuestRequest(input: {
+  email?: string;
+  phone?: string;
+  code: string;
+}): Promise<TokenResponse | null> {
+  const result = await apiFetch<TokenResponse & { matched?: boolean }>("/api/auth/guest/verify", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (result.matched === false || !result.accessToken) {
+    return null;
+  }
+
+  persistSession(result);
+  if (result.user.accountStatus !== "guest") {
+    await mergeWishlistOnLogin();
+  }
+  return result;
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser> {
+  return apiFetch<AuthUser>("/api/users/me");
+}
+
+export async function updateProfile(input: {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  address?: string;
+}): Promise<AuthUser> {
+  return apiFetch<AuthUser>("/api/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function logoutRemote(): Promise<void> {
@@ -84,10 +144,24 @@ export async function logoutRemote(): Promise<void> {
 
 export function authErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    if (error.status === 401) return "Email or password is not right.";
+    if (error.status === 401) {
+      if (error.message === "No request found for that email or mobile") return error.message;
+      return "Email or password is not right.";
+    }
     if (error.status === 409) return "That email is already registered.";
-    if (error.status === 400) return error.message || "Check the form and try again.";
+    if (error.status === 400) {
+      const details = validationDetails(error.body);
+      if (details.length > 0) return details.join(". ");
+      return error.message || "Check the form and try again.";
+    }
     return error.message;
   }
   return "Cannot reach the server. Is the gateway running on port 5000?";
+}
+
+function validationDetails(body: unknown): string[] {
+  if (body && typeof body === "object" && "details" in body && Array.isArray(body.details)) {
+    return body.details.filter((item): item is string => typeof item === "string");
+  }
+  return [];
 }

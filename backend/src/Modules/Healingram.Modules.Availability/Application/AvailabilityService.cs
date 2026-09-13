@@ -4,6 +4,7 @@ using Healingram.BuildingBlocks.Notifications;
 using Healingram.Contracts.Availability;
 using Healingram.Contracts.Booking;
 using Healingram.Contracts.Catalog;
+using Healingram.Contracts.Identity;
 using Healingram.Contracts.Partners;
 using Healingram.Modules.Availability.Domain;
 using Healingram.Modules.Availability.Persistence;
@@ -17,6 +18,7 @@ internal sealed class AvailabilityService(
     IBookingCommands bookings,
     IBookingPaymentPort bookingPayments,
     IPartnerAccess partnerAccess,
+    IGuestIdentityPort guests,
     TimeProvider clock,
     ILogger<AvailabilityService> logger,
     INotificationOutbox? outbox = null)
@@ -59,6 +61,9 @@ internal sealed class AvailabilityService(
                 : AvailabilityOutcome.Conflict(existing);
         }
 
+        var customerUserId = actor.UserId
+            ?? await guests.EnsureCustomerAsync(stay.Email, stay.Phone, stay.CustomerName, cancellationToken);
+
         var now = clock.GetUtcNow();
         var year = now.Year;
         var sequence = await store.NextPublicSequenceAsync(cancellationToken);
@@ -66,7 +71,7 @@ internal sealed class AvailabilityService(
         {
             Id = Guid.NewGuid(),
             PublicId = PublicIds.Request(year, sequence),
-            CustomerUserId = actor.UserId,
+            CustomerUserId = customerUserId,
             CustomerName = stay.CustomerName,
             CustomerEmail = stay.Email,
             CustomerPhone = stay.Phone,
@@ -118,7 +123,11 @@ internal sealed class AvailabilityService(
         return AvailabilityOutcome.Created(entity);
     }
 
-    public async Task<AvailabilityOutcome> GetAsync(string publicId, bool includeInternalNotes, CancellationToken cancellationToken)
+    public async Task<AvailabilityOutcome> GetAsync(
+        string publicId,
+        Actor actor,
+        bool includeInternalNotes,
+        CancellationToken cancellationToken)
     {
         var entity = await store.FindByPublicIdAsync(publicId, cancellationToken);
         if (entity is null)
@@ -126,8 +135,27 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Missing();
         }
 
+        if (!CanRead(actor, entity))
+        {
+            return actor.UserId is null
+                ? AvailabilityOutcome.Unauth("Verify it's you to view this request")
+                : AvailabilityOutcome.Deny("Not your request");
+        }
+
         _ = includeInternalNotes;
         return AvailabilityOutcome.Ok(entity);
+    }
+
+    private static bool CanRead(Actor actor, AvailabilityRequestEntity entity)
+    {
+        if (actor.IsPartnerWrite || actor.IsAdminWrite)
+        {
+            return true;
+        }
+
+        return actor.UserId is not null
+               && entity.CustomerUserId is not null
+               && actor.UserId == entity.CustomerUserId;
     }
 
     public Task<AvailabilityOutcome> ConfirmAsync(
@@ -282,6 +310,17 @@ internal sealed class AvailabilityService(
         return items;
     }
 
+    public async Task<IReadOnlyList<AvailabilityRequestEntity>> ListMineAsync(
+        Guid customerUserId,
+        CancellationToken cancellationToken)
+    {
+        using var activity = AvailabilityTelemetry.Source.StartActivity("availability.list_mine");
+        activity?.SetTag("availability.customer_scoped", true);
+        var items = await store.ListByCustomerUserIdAsync(customerUserId, cancellationToken);
+        logger.LogInformation("Listed {Count} requests for a customer", items.Count);
+        return items;
+    }
+
     public async Task<TripGroupsDto> ListTripsAsync(Guid customerUserId, CancellationToken cancellationToken)
     {
         using var activity = AvailabilityTelemetry.Source.StartActivity("availability.list_trips");
@@ -348,6 +387,13 @@ internal sealed class AvailabilityService(
         if (entity is null)
         {
             return AvailabilityOutcome.Missing();
+        }
+
+        if (!requirePartnerWrite && action == AvailabilityActions.AcceptAlternative && !CanRead(actor, entity))
+        {
+            return actor.UserId is null
+                ? AvailabilityOutcome.Unauth("Verify it's you to continue")
+                : AvailabilityOutcome.Deny("Not your request");
         }
 
         var snapshotBefore = entity.SnapshotJson;

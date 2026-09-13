@@ -1,3 +1,4 @@
+using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Data;
 
 namespace Healingram.Modules.Identity.Tests;
@@ -15,6 +16,10 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
     public Task<IdentityUser?> FindByIdAsync(Guid id, CancellationToken cancellationToken)
         => Task.FromResult(_users.FirstOrDefault(u => u.Id == id));
 
+    public Task<IdentityUser?> FindByPhoneAsync(string phoneE164, CancellationToken cancellationToken)
+        => Task.FromResult(_users.FirstOrDefault(u =>
+            u.PhoneE164 is not null && u.PhoneE164.Equals(phoneE164, StringComparison.Ordinal)));
+
     public Task<IdentityUser> CreateUserAsync(IdentityUser user, string passwordHash, CancellationToken cancellationToken)
     {
         if (_users.Any(u => u.Email.Equals(user.Email, StringComparison.OrdinalIgnoreCase)))
@@ -22,8 +27,52 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
             throw new DuplicateEmailException();
         }
 
-        _users.Add(user);
-        _passwordHashes[user.Id] = passwordHash;
+        var stored = user with { AccountStatus = AccountStatuses.Registered };
+        _users.Add(stored);
+        _passwordHashes[stored.Id] = passwordHash;
+        return Task.FromResult(stored);
+    }
+
+    public Task<IdentityUser> CreateGuestAsync(IdentityUser user, CancellationToken cancellationToken)
+    {
+        if (_users.Any(u => u.Email.Equals(user.Email, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new DuplicateEmailException();
+        }
+
+        var stored = user with { AccountStatus = AccountStatuses.Guest };
+        _users.Add(stored);
+        return Task.FromResult(stored);
+    }
+
+    public Task<IdentityUser> PromoteGuestAsync(IdentityUser user, string passwordHash, CancellationToken cancellationToken)
+    {
+        var promoted = user with { AccountStatus = AccountStatuses.Registered };
+        var index = _users.FindIndex(item => item.Id == user.Id);
+        if (index < 0)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        _users[index] = promoted;
+        _passwordHashes[promoted.Id] = passwordHash;
+        return Task.FromResult(promoted);
+    }
+
+    public Task<IdentityUser> UpdateProfileAsync(IdentityUser user, CancellationToken cancellationToken)
+    {
+        var index = _users.FindIndex(item => item.Id == user.Id);
+        if (index < 0)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        if (_users.Any(item => item.Id != user.Id && item.Email.Equals(user.Email, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new DuplicateEmailException();
+        }
+
+        _users[index] = user;
         return Task.FromResult(user);
     }
 

@@ -36,6 +36,11 @@ export async function getAvailabilityByPublicId(publicId: string): Promise<Serve
   return apiFetch<ServerAvailability>(`/api/availability/requests/${encodeURIComponent(publicId)}`);
 }
 
+export async function fetchMyAvailabilityRequests(): Promise<ServerAvailability[]> {
+  const data = await apiFetch<{ items: ServerAvailability[] }>("/api/availability/mine");
+  return data.items ?? [];
+}
+
 export async function partnerConfirmOnServer(publicId: string, finalAmountInr?: number): Promise<void> {
   await apiFetch(`/api/availability/requests/${encodeURIComponent(publicId)}/confirm`, {
     method: "POST",
