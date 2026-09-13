@@ -4,8 +4,11 @@
 | --- | --- | --- |
 | TC-02-01 | Login `guest@local.test` / `Local123!` | Lands `/dashboard`. Token stored. |
 | TC-02-02 | `GET /api/users/me` | Same email, role `customer`. |
-| TC-02-03 | Login `partner@local.test` | Lands `/vendor`. |
+| TC-02-03 | Login `partner@local.test` on `/vendor` | Lands vendor queue. Server required an active membership. |
+| TC-02-03b | Customer password on `/vendor` | Denied. No vendor session. |
+| TC-02-03c | Partner role, membership revoked/suspended | Vendor login denied. |
 | TC-02-04 | Login `admin@local.test` | Lands `/admin`. |
+| TC-02-04b | Admin on vendor portal | Allowed (support policy). |
 | TC-02-05 | Wrong password | 401. Clear error. No token. |
 | TC-02-06 | Signup with first, last, phone, email, matching passwords | Session + dashboard. Row has first_name, last_name, phone_e164. |
 | TC-02-07 | Signup same email again | 409 / already registered. |

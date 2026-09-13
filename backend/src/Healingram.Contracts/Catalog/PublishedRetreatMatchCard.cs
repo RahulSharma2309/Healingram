@@ -8,4 +8,9 @@ public sealed record PublishedRetreatMatchCard(
     IReadOnlyList<string> ProgrammeThemes,
     string StateSlug,
     string Locality,
-    string? TypicalDuration);
+    string? TypicalDuration,
+    string Name = "",
+    string StateLabel = "",
+    string? ImageUrl = null,
+    decimal? PriceFromInr = null,
+    string PriceStatus = "ON_REQUEST");

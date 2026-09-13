@@ -58,14 +58,22 @@ public sealed class CatalogModule : IAppModule
             string? state,
             string? locality,
             string? duration,
+            string? theme,
+            string? programme,
+            string? type,
+            decimal? minPrice,
+            decimal? maxPrice,
+            string? sort,
             int? page,
             int? pageSize,
             CancellationToken cancellationToken) =>
         {
-            var items = await catalog.SearchRetreatsAsync(
-                new RetreatSearchQuery(need, state, locality, duration),
+            var result = await catalog.SearchPageAsync(
+                new RetreatSearchQuery(need, state, locality, duration, theme, programme, type, minPrice, maxPrice, sort),
+                page,
+                pageSize,
                 cancellationToken);
-            return Results.Ok(PageResult<RetreatCardDto>.Create(items, page, pageSize));
+            return Results.Ok(result);
         });
 
         group.MapGet("/retreats/{slug}", async (

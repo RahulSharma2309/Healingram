@@ -33,8 +33,12 @@ internal sealed class MatchingService(
 
         var published = await catalog.GetPublishedRetreatsForMatchAsync(cancellationToken);
         var ranked = MatchEngine.Rank(answers, published, optionSet);
+        var bySlug = published.ToDictionary(card => card.Slug, StringComparer.OrdinalIgnoreCase);
         var matches = ranked
-            .Select(m => new MatchItemDto(m.Slug, m.Reasons))
+            .Select(m => new MatchItemDto(
+                m.Slug,
+                m.Reasons,
+                bySlug.TryGetValue(m.Slug, out var card) ? card : null))
             .ToArray();
 
         var session = new MatchSessionRecord(

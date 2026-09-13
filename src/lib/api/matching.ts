@@ -1,7 +1,7 @@
 import { getRetreatDisplayTags } from "../catalogTypes";
 import type { FindMyMatchAnswers, RankedMatch } from "../findMyMatch";
 import { apiFetch } from "./client";
-import { fetchRetreats, type RetreatCard } from "./catalog";
+import type { RetreatCard } from "./catalog";
 import { retreatCardToLaunch } from "./usePublishedRetreats";
 
 export type MatchQuestionOption = {
@@ -23,7 +23,7 @@ export type MatchQuestion = {
 
 export type MatchSessionResponse = {
   id: string;
-  matches: { slug: string; reasons: string[] }[];
+  matches: { slug: string; reasons: string[]; retreat?: RetreatCard | null }[];
 };
 
 export async function fetchMatchOptions(): Promise<MatchQuestion[]> {
@@ -50,17 +50,12 @@ export async function createMatchSession(answers: FindMyMatchAnswers): Promise<M
 }
 
 export async function matchesFromSession(session: MatchSessionResponse): Promise<RankedMatch[]> {
-  let cards: RetreatCard[] = [];
-  try {
-    cards = await fetchRetreats({});
-  } catch {
-    cards = [];
-  }
-  const bySlug = new Map(cards.map((c) => [c.slug, retreatCardToLaunch(c)]));
-
-  return session.matches.flatMap((item, index) => {
-    const retreat = bySlug.get(item.slug);
-    if (!retreat) return [];
+  const mapped = session.matches.flatMap((item, index) => {
+    const card = item.retreat;
+    if (!card?.slug) {
+      return [];
+    }
+    const retreat = retreatCardToLaunch(card);
     return [
       {
         retreat,
@@ -71,4 +66,10 @@ export async function matchesFromSession(session: MatchSessionResponse): Promise
       },
     ];
   });
+
+  if (session.matches.length > 0 && mapped.length === 0) {
+    throw new Error("Match results were missing retreat data");
+  }
+
+  return mapped;
 }

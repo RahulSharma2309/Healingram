@@ -21,7 +21,10 @@ internal sealed record MatchAnswers(
 
 internal sealed record RankedMatch(string Slug, int Score, bool Exact, IReadOnlyList<string> Reasons);
 
-internal sealed record MatchItemDto(string Slug, IReadOnlyList<string> Reasons);
+internal sealed record MatchItemDto(
+    string Slug,
+    IReadOnlyList<string> Reasons,
+    Healingram.Contracts.Catalog.PublishedRetreatMatchCard? Retreat = null);
 
 internal sealed record MatchSessionResponse(Guid Id, IReadOnlyList<MatchItemDto> Matches);
 

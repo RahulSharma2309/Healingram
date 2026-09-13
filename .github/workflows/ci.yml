@@ -25,6 +25,8 @@ jobs:
       # still respects package-lock.json and fills those platform entries.
       - name: frontend-install
         run: npm install --no-audit --fund=false
+      - name: frontend-test
+        run: npm test
       - name: frontend-build
         run: npm run build
 

@@ -1,5 +1,5 @@
 import { apiFetch } from "./client";
-import { collectPages, type PageResult } from "./pages";
+import { type PageResult } from "./pages";
 
 export type CatalogNeed = {
   slug: string;
@@ -79,23 +79,36 @@ export async function fetchPlaces(): Promise<CatalogState[]> {
   return data.states ?? [];
 }
 
-export async function fetchRetreats(query: {
+export const CATALOG_PAGE_SIZE = 24;
+
+export async function fetchRetreatsPage(query: {
   need?: string;
   state?: string;
   locality?: string;
   duration?: string;
-}): Promise<RetreatCard[]> {
+  theme?: string;
+  programme?: string;
+  type?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<PageResult<RetreatCard>> {
   const params = new URLSearchParams();
   if (query.need) params.set("need", query.need);
   if (query.state) params.set("state", query.state);
   if (query.locality) params.set("locality", query.locality);
   if (query.duration) params.set("duration", query.duration);
-  return collectPages(async (page, pageSize) => {
-    const next = new URLSearchParams(params);
-    next.set("page", String(page));
-    next.set("pageSize", String(pageSize));
-    return apiFetch<PageResult<RetreatCard>>(`/api/catalog/retreats?${next}`);
-  });
+  if (query.theme) params.set("theme", query.theme);
+  if (query.programme) params.set("programme", query.programme);
+  if (query.type) params.set("type", query.type);
+  if (query.minPrice != null) params.set("minPrice", String(query.minPrice));
+  if (query.maxPrice != null) params.set("maxPrice", String(query.maxPrice));
+  if (query.sort) params.set("sort", query.sort);
+  params.set("page", String(query.page && query.page > 0 ? query.page : 1));
+  params.set("pageSize", String(query.pageSize && query.pageSize > 0 ? query.pageSize : CATALOG_PAGE_SIZE));
+  return apiFetch<PageResult<RetreatCard>>(`/api/catalog/retreats?${params}`);
 }
 
 export type ListingPriceStatus = "VERIFIED" | "ESTIMATED" | "ON_REQUEST";

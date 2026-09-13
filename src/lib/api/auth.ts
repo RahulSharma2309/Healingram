@@ -70,7 +70,7 @@ export async function loginWithPassword(
 export async function persistAuthenticatedSession(tokens: TokenResponse): Promise<void> {
   persistSession(tokens);
   applyAuthUser(tokens.user);
-  if (tokens.user.accountStatus !== "guest") {
+  if (tokens.user.accountStatus !== "guest" && tokens.user.authKind !== "guest_request") {
     try {
       await hydrateWishlistFromServer();
     } catch {
@@ -133,13 +133,6 @@ export async function verifyGuestRequest(input: {
 
   persistSession(result);
   applyAuthUser(result.user);
-  if (result.user.accountStatus !== "guest") {
-    try {
-      await hydrateWishlistFromServer();
-    } catch {
-      /* wishlist is not session-critical */
-    }
-  }
   return result;
 }
 
@@ -182,6 +175,7 @@ export function authErrorMessage(error: unknown): string {
       if (error.message === "No request found for that email or mobile") return error.message;
       if (error.message === "This account is not an admin.") return error.message;
       if (error.message === "This account is not a retreat partner.") return error.message;
+      if (error.message === "This account is not linked to an approved partner.") return error.message;
       return "Email or password is not right.";
     }
     if (error.status === 409) return "That email is already registered.";

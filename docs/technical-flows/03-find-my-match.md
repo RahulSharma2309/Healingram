@@ -17,7 +17,7 @@
 | GET | `/api/matching/options` | no | Active questions/options from `matching.questions` |
 | POST | `/api/matching/sessions` | no | `{ answers: { q1[], q2[], q3, q4[] } }` |
 
-Result: `{ id, matches: [{ slug, reasons[] }] }`.
+Result: `{ id, matches: [{ slug, reasons[], retreat }] }`. `retreat` is the published catalogue card (name, place, price status, themes, image). The frontend must not download `/api/catalog/retreats` to decorate matches.
 
 ## Tables
 

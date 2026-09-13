@@ -7,6 +7,11 @@ namespace Healingram.Modules.Availability.Inventory;
 
 internal static class InventoryProviderFactory
 {
+    /// <summary>
+    /// Provider selection intentionally fails startup rather than falling back to
+    /// LocalInventoryProvider so production cannot silently hold inventory in the
+    /// development adapter.
+    /// </summary>
     public static IInventoryProvider Create(IServiceProvider services)
     {
         var settings = InventorySettings.From(services.GetRequiredService<IConfiguration>());

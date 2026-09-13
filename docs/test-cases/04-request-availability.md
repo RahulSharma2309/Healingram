@@ -11,7 +11,7 @@
 | TC-04-06 | Logged-in guest | Request can show on My Trips later. |
 | TC-04-07 | Pay before confirm | Intent refused (400/404). |
 | TC-04-08 | Logged-out header **My Request** as a guest | Verify. `560142` lists that guest’s requests. No Profile / Wishlist / My Trips. Unknown contact after `560142` shows “No request for now” → home. |
-| TC-04-08c | Logged-out **My Request** with a registered email | `560142` logs them in and opens dashboard Requests. |
+| TC-04-08c | Logged-out **My Request** with a registered email that owns the request | OTP opens **that request only** (`guest_request`). Page tells them to sign in for the full account. Not a password session. |
 | TC-04-08b | Open `/dashboard` while logged out | Redirect to login. No profile, no leftover request list. Header has no Wishlist. |
 | TC-04-09 | Signup with that same email | Same user id. `account_status=registered`. My Trips shows the request. |
 | TC-04-10 | Guest JWT creates payment intent | 403 until they create an account. |

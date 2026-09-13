@@ -1,3 +1,4 @@
+using Healingram.Contracts.Availability;
 using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Auth;
 using Healingram.Modules.Identity.Data;
@@ -89,6 +90,58 @@ public class GuestVerificationTests
     }
 
     [Fact]
+    public async Task Guest_verify_returns_guest_request_auth_kind_on_the_user()
+    {
+        var store = new InMemoryIdentityStore();
+        await new GuestIdentityAdapter(store).EnsureCustomerAsync(
+            "rahul@local.test",
+            "+919876543210",
+            "Rahul",
+            CancellationToken.None);
+        var service = CreateService(store);
+        await service.StartGuestVerificationAsync(
+            new GuestVerifyStartRequest("rahul@local.test", null, "email", "HR-2026-10001"),
+            CancellationToken.None);
+
+        var verified = await service.VerifyGuestAsync(
+            new GuestVerifyRequest("rahul@local.test", null, GuestVerification.DevCode, "HR-2026-10001"),
+            CancellationToken.None);
+
+        Assert.Equal(AuthStatus.Ok, verified.Status);
+        Assert.Equal(AuthKinds.GuestRequest, verified.Tokens?.User.AuthKind);
+    }
+
+    [Fact]
+    public async Task Registered_contact_guest_verify_stays_scoped_and_does_not_become_a_password_session()
+    {
+        var store = new InMemoryIdentityStore();
+        var user = await store.CreateUserAsync(
+            new IdentityUser(
+                Guid.NewGuid(),
+                "rahul@local.test",
+                "Rahul",
+                Roles.Customer,
+                "active",
+                AccountStatus: AccountStatuses.Registered),
+            new AspNetIdentityPasswordHasher().Hash("Local123!"),
+            CancellationToken.None);
+        var lookup = new FixedRequestAccess(user.Id, "HR-2026-10001");
+        var service = AuthTestKit.Create(store, requestAccess: lookup);
+        await service.StartGuestVerificationAsync(
+            new GuestVerifyStartRequest("rahul@local.test", null, "email", "HR-2026-10001"),
+            CancellationToken.None);
+
+        var verified = await service.VerifyGuestAsync(
+            new GuestVerifyRequest("rahul@local.test", null, GuestVerification.DevCode, "HR-2026-10001"),
+            CancellationToken.None);
+
+        Assert.Equal(AuthStatus.Ok, verified.Status);
+        Assert.Equal(AccountStatuses.Registered, verified.Tokens?.User.AccountStatus);
+        Assert.Equal(AuthKinds.GuestRequest, verified.Tokens?.User.AuthKind);
+        Assert.Equal(Roles.Customer, verified.Tokens?.User.Role);
+    }
+
+    [Fact]
     public async Task Register_promotes_the_same_guest_instead_of_a_second_user()
     {
         var store = new InMemoryIdentityStore();
@@ -137,4 +190,15 @@ public class GuestVerificationTests
     }
 
     private static AuthService CreateService(InMemoryIdentityStore store) => AuthTestKit.Create(store);
+
+    private sealed class FixedRequestAccess(Guid userId, string publicId) : IRequestAccessLookup
+    {
+        public Task<RequestAccessMatch?> FindGuestMatchAsync(
+            string requestedPublicId,
+            string? email,
+            string? phone,
+            CancellationToken cancellationToken)
+            => Task.FromResult<RequestAccessMatch?>(
+                requestedPublicId == publicId ? new RequestAccessMatch(publicId, userId) : null);
+    }
 }

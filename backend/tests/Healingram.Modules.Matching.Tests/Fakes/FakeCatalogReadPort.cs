@@ -40,5 +40,5 @@ internal sealed class FakeCatalogReadPort : ICatalogReadPort
         string locality,
         string? typicalDuration,
         params string[] themes)
-        => new(slug, themes, stateSlug, locality, typicalDuration);
+        => new(slug, themes, stateSlug, locality, typicalDuration, slug, stateSlug);
 }

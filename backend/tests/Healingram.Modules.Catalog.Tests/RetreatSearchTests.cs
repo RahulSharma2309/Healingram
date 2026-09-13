@@ -114,6 +114,53 @@ public class RetreatSearchTests
     }
 
     [Fact]
+    public async Task Search_page_is_bounded_and_does_not_return_the_full_set()
+    {
+        var catalog = new CatalogQueryService(SeededStore());
+
+        var first = await catalog.SearchPageAsync(
+            new RetreatSearchQuery(null, null, null, null),
+            1,
+            2,
+            CancellationToken.None);
+        var second = await catalog.SearchPageAsync(
+            new RetreatSearchQuery(null, null, null, null),
+            2,
+            2,
+            CancellationToken.None);
+
+        Assert.Equal(2, first.Items.Count);
+        Assert.Equal(2, first.PageSize);
+        Assert.True(first.Total > 2);
+        Assert.Equal(2, second.Items.Count);
+        Assert.Empty(first.Items.Select(i => i.Slug).Intersect(second.Items.Select(i => i.Slug)));
+    }
+
+    [Fact]
+    public async Task Theme_and_price_filters_are_applied_before_pagination()
+    {
+        var catalog = new CatalogQueryService(SeededStore());
+
+        var page = await catalog.SearchPageAsync(
+            new RetreatSearchQuery(null, null, null, null, Theme: "yoga"),
+            1,
+            24,
+            CancellationToken.None);
+
+        Assert.All(page.Items, card => Assert.Contains("yoga", card.ProgrammeThemes, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Empty_themes_table_does_not_invent_labels()
+    {
+        var catalog = new CatalogQueryService(new InMemoryCatalogStore());
+
+        var themes = await catalog.GetThemesAsync(CancellationToken.None);
+
+        Assert.Empty(themes);
+    }
+
+    [Fact]
     public async Task Public_slugs_port_matches_published_search()
     {
         var catalog = new CatalogQueryService(SeededStore());

@@ -23,6 +23,7 @@ internal sealed class PostgresPartnerStore(IConfiguration configuration) : IPart
             INNER JOIN partners.partner_retreats pr ON pr.partner_id = p.id
             WHERE pu.user_id = @userId
               AND p.status = 'approved'
+              AND COALESCE(pu.status, 'active') = 'active'
             ORDER BY pr.retreat_slug
             """,
             connection);
@@ -46,7 +47,14 @@ internal sealed class PostgresPartnerStore(IConfiguration configuration) : IPart
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT p.id, p.display_name, COALESCE(NULLIF(pu.membership_role, ''), 'member'), p.status
+            SELECT p.id,
+                   p.display_name,
+                   COALESCE(NULLIF(pu.membership_role, ''), 'member'),
+                   CASE
+                       WHEN p.status = 'approved' AND COALESCE(pu.status, 'active') = 'active' THEN 'active'
+                       WHEN COALESCE(pu.status, 'active') <> 'active' THEN pu.status
+                       ELSE p.status
+                   END
             FROM partners.partner_users pu
             INNER JOIN partners.partners p ON p.id = pu.partner_id
             WHERE pu.user_id = @userId

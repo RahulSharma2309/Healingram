@@ -18,7 +18,7 @@ Frontend helpers: `src/lib/api/catalog.ts`, `src/lib/api/listing.ts`.
 | --- | --- | --- | --- |
 | GET | `/api/catalog/needs` | no | no |
 | GET | `/api/catalog/places` | no | no |
-| GET | `/api/catalog/retreats` | no | query: `need`, `state`, `locality`, `duration` (comma-separated), `page`, `pageSize`. Response `{ items, page, pageSize, total }` |
+| GET | `/api/catalog/retreats` | no | query: `need`, `state`, `locality`, `duration`, `theme`, `programme`, `type`, `minPrice`, `maxPrice`, `sort`, `page`, `pageSize`. Filters and pagination run in PostgreSQL. Default page size 24, max 100. Response `{ items, page, pageSize, total }`. An empty `items` array with HTTP 200 means no published matches — not an API failure. |
 | GET | `/api/content/homepage` | no | `{ sections }` from `content.sections` |
 | GET | `/api/content/navigation` | no | `?menu=` → `{ menu, items }` from `content.navigation_*` |
 | GET | `/api/catalog/retreats/{slug}` | no | 404 if not published |

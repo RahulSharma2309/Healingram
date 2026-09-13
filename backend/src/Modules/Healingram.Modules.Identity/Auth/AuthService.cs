@@ -357,10 +357,17 @@ internal sealed class AuthService(
             return AuthResult.Rejected("Invalid credentials");
         }
 
-        var portalDenied = DenyPortal(request.Portal, user, await store.ListRolesAsync(user.Id, cancellationToken));
+        var roles = await store.ListRolesAsync(user.Id, cancellationToken);
+        var portalDenied = DenyPortal(request.Portal, user, roles);
         if (portalDenied is not null)
         {
             return AuthResult.Rejected(portalDenied);
+        }
+
+        var vendorDenied = await DenyVendorMembershipAsync(request.Portal, roles, user.Id, cancellationToken);
+        if (vendorDenied is not null)
+        {
+            return AuthResult.Rejected(vendorDenied);
         }
 
         logger.LogInformation("User {UserId} signed in", user.Id);
@@ -479,7 +486,7 @@ internal sealed class AuthService(
         return new TokenResponse(
             tokens.CreateAccessToken(user, issued),
             refresh.Token,
-            await ToResponseAsync(user, cancellationToken, roles));
+            await ToResponseAsync(user, cancellationToken, roles, issued.AuthKind));
     }
 
     private static string DestinationOf(string? email, string? phone)
@@ -538,7 +545,8 @@ internal sealed class AuthService(
     private async Task<AuthUserResponse> ToResponseAsync(
         IdentityUser user,
         CancellationToken cancellationToken,
-        IReadOnlyList<string>? roles = null)
+        IReadOnlyList<string>? roles = null,
+        string? authKind = null)
     {
         var (firstName, lastName) = ProfileRules.SplitName(user.FirstName, user.LastName, user.FullName);
         var resolved = roles is { Count: > 0 }
@@ -564,7 +572,8 @@ internal sealed class AuthService(
             user.PhoneE164 is null ? null : ProfileRules.IndiaCountryCode,
             user.AccountStatus,
             resolved,
-            memberships);
+            memberships,
+            authKind);
     }
 
     private static string? DenyPortal(string? portal, IdentityUser user, IReadOnlyList<string> storedRoles)
@@ -584,6 +593,43 @@ internal sealed class AuthService(
         if (wanted is "vendor" && !RoleAuthorization.SatisfiesPartnerWrite(roles))
         {
             return "This account is not a retreat partner.";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Vendor sessions are issued only after an active PartnerMembership is proven.
+    /// A partner role without an approved, active membership is not enough.
+    /// Admins may enter the vendor portal for operational support without a membership.
+    /// </summary>
+    private async Task<string?> DenyVendorMembershipAsync(
+        string? portal,
+        IReadOnlyList<string> storedRoles,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var wanted = portal?.Trim().ToLowerInvariant();
+        if (wanted is not "vendor")
+        {
+            return null;
+        }
+
+        if (RoleAuthorization.SatisfiesAdminWrite(storedRoles))
+        {
+            return null;
+        }
+
+        if (partners is null)
+        {
+            return "This account is not linked to an approved partner.";
+        }
+
+        var memberships = await partners.ListMembershipsForUserAsync(userId, cancellationToken);
+        if (!memberships.Any(item =>
+                string.Equals(item.Status, "active", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "This account is not linked to an approved partner.";
         }
 
         return null;

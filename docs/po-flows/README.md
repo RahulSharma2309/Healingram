@@ -15,3 +15,7 @@ Read these when you want to remember **what a person does**, not which API fires
 | [08-contact.md](08-contact.md) | Guest | Talk to an expert |
 | [09-create-retreat.md](09-create-retreat.md) | Partner / admin | **Not in V1 UI** |
 | [10-admin.md](10-admin.md) | Admin | Queue and notes — never mark paid |
+| [11-cancellation-and-refund.md](11-cancellation-and-refund.md) | Guest | Cancel request; booking refund states |
+| [12-inventory.md](12-inventory.md) | System | Hold / confirm / release |
+| [13-notifications.md](13-notifications.md) | System / user | Outbox + inbox |
+| [14-identity-lifecycle.md](14-identity-lifecycle.md) | Everyone | Guest → customer → vendor/admin |

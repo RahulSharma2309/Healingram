@@ -22,7 +22,12 @@ public class MatchingServiceTests
 
         Assert.Equal(MatchingStatus.Ok, result.Status);
         Assert.NotNull(result.Id);
-        Assert.Equal("live-yoga", Assert.Single(result.Matches!).Slug);
+        var match = Assert.Single(result.Matches!);
+        Assert.Equal("live-yoga", match.Slug);
+        Assert.NotNull(match.Retreat);
+        Assert.Equal("live-yoga", match.Retreat!.Name);
+        Assert.Equal("karnataka", match.Retreat.StateSlug);
+        Assert.Equal("Whitefield", match.Retreat.Locality);
         Assert.DoesNotContain(result.Matches!, m => m.Slug == "hidden-draft");
 
         var saved = Assert.Single(store.Saved);

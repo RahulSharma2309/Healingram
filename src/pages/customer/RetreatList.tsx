@@ -7,12 +7,8 @@ import {
   activeFilterChips,
   browseStateToSearchParams,
   countActiveFilters,
-  getDurationOptionsWithCounts,
-  getLocationOptionsWithCounts,
-  getNeedOptionsWithCounts,
+  DURATION_BANDS,
   parseBrowseStateFromParams,
-  priceSortAvailable,
-  sortBrowseRetreats,
   type AllRetreatsBrowseState,
   type AllRetreatsSortId,
   type DurationBandId,
@@ -25,6 +21,7 @@ export function RetreatList() {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseBrowseStateFromParams(params), [params]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const page = Math.max(1, Number(params.get("page") || "1") || 1);
   const catalogQuery = useMemo(() => {
     const states = state.locations
       .filter((key) => key.startsWith("region:"))
@@ -35,13 +32,18 @@ export function RetreatList() {
       state: states.join(",") || undefined,
       locality: localities.join(",") || undefined,
       duration: state.durations.join(",") || undefined,
+      sort: state.sort !== "recommended" ? state.sort : undefined,
+      page,
     };
-  }, [state.needs, state.locations, state.durations]);
-  const { retreats: inventory, places, needs, needThemeMap, source } = usePublishedRetreats(catalogQuery);
+  }, [state.needs, state.locations, state.durations, state.sort, page]);
+  const { retreats: inventory, places, needs, source, total, pageCount } = usePublishedRetreats(catalogQuery);
 
-  const setState = (patch: Partial<AllRetreatsBrowseState>) => {
+  const setState = (patch: Partial<AllRetreatsBrowseState> & { page?: number }) => {
     const next: AllRetreatsBrowseState = { ...state, ...patch };
-    setParams(browseStateToSearchParams(next), { replace: true });
+    const nextParams = browseStateToSearchParams(next);
+    const nextPage = patch.page ?? (patch.needs || patch.locations || patch.durations || patch.sort ? 1 : page);
+    if (nextPage > 1) nextParams.set("page", String(nextPage));
+    setParams(nextParams, { replace: true });
   };
 
   const toggleNeed = (id: string) => {
@@ -69,14 +71,8 @@ export function RetreatList() {
   };
 
   const needOptions = useMemo(
-    () =>
-      getNeedOptionsWithCounts(
-        state,
-        inventory,
-        needs.map((need) => ({ id: need.slug, label: need.label })),
-        needThemeMap,
-      ),
-    [state, inventory, needs, needThemeMap],
+    () => needs.map((need) => ({ id: need.slug, label: need.label, count: -1 })),
+    [needs],
   );
   const locationGroups = useMemo(() => {
     if (source === "api" && places.length > 0) {
@@ -101,17 +97,15 @@ export function RetreatList() {
         ],
       }));
     }
-    return getLocationOptionsWithCounts(state, inventory, needThemeMap);
-  }, [source, places, state, inventory, needThemeMap]);
-  const durationOptions = useMemo(
-    () => getDurationOptionsWithCounts(state, inventory, needThemeMap),
-    [state, inventory, needThemeMap],
-  );
+    return [];
+  }, [source, places]);
+  const durationOptions = DURATION_BANDS.map((band) => ({
+    id: band.id,
+    label: band.label,
+    count: -1,
+  }));
 
-  const results = useMemo(
-    () => sortBrowseRetreats(inventory, state.sort),
-    [inventory, state.sort],
-  );
+  const results = inventory;
 
   const chips = useMemo(
     () =>
@@ -122,7 +116,7 @@ export function RetreatList() {
     [state, needs],
   );
   const activeCount = countActiveFilters(state);
-  const canPriceSort = priceSortAvailable(results);
+  const canPriceSort = true;
 
   const clearAll = () =>
     setState({ needs: [], locations: [], durations: [], sort: "recommended" });
@@ -156,7 +150,7 @@ export function RetreatList() {
                 />
                 <span className="flex-1 leading-snug">
                   {opt.label}{" "}
-                  <span className="text-sage-500">({opt.count})</span>
+                  {opt.count >= 0 ? <span className="text-sage-500">({opt.count})</span> : null}
                 </span>
               </label>
             </li>
@@ -212,7 +206,7 @@ export function RetreatList() {
                 />
                 <span className="flex-1 leading-snug">
                   {opt.label}{" "}
-                  <span className="text-sage-500">({opt.count})</span>
+                  {opt.count >= 0 ? <span className="text-sage-500">({opt.count})</span> : null}
                 </span>
               </label>
             </li>
@@ -313,10 +307,11 @@ export function RetreatList() {
           )}
 
           <p className="text-sm text-sage-600 mb-5">
-            {results.length} {results.length === 1 ? "retreat" : "retreats"}
+            {total} {total === 1 ? "retreat" : "retreats"}
+            {pageCount > 1 ? ` · page ${page} of ${pageCount}` : ""}
           </p>
 
-          {results.length === 0 ? (
+          {total === 0 ? (
             <div className="rounded-2xl border border-sand-200 bg-white px-6 py-12 text-center max-w-lg mx-auto">
               <h2 className="font-display text-xl font-bold text-sage-800 mb-2">
                 No exact matches
@@ -343,11 +338,33 @@ export function RetreatList() {
               </div>
             </div>
           ) : (
+            <>
             <div className="grid sm:grid-cols-2 gap-5">
               {results.map((r) => (
                 <LaunchRetreatCard key={r.id} retreat={r} />
               ))}
             </div>
+            {pageCount > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setState({ page: page - 1 })}
+                  className="rounded-xl border border-sand-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= pageCount}
+                  onClick={() => setState({ page: page + 1 })}
+                  className="rounded-xl bg-teal-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>
@@ -380,7 +397,7 @@ export function RetreatList() {
               onClick={() => setMobileOpen(false)}
               className="mt-6 w-full rounded-xl bg-teal-600 text-white py-3 text-sm font-semibold hover:bg-teal-500"
             >
-              Show {results.length} {results.length === 1 ? "retreat" : "retreats"}
+              Show {total} {total === 1 ? "retreat" : "retreats"}
             </button>
           </div>
         </div>

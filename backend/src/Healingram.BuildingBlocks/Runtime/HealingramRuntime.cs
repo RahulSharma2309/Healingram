@@ -68,6 +68,10 @@ public sealed class HealingramRuntime
             failures.Add("Production cannot seed demo users or run with DemoMode=true");
         }
 
+        // Production cannot start on local adapters (unless an explicit allow flag is set)
+        // and also cannot start on provider names that are not implemented in this build.
+        // Until Razorpay / Twilio / external inventory adapters exist, a true Production
+        // boot is intentionally impossible. That is safer than silent local fallbacks.
         if (requireApiSecrets)
         {
             var jwt = configuration["Jwt:Key"];

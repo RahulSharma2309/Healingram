@@ -22,11 +22,16 @@ export function homePathForRole(role?: string | null): string {
   return "/dashboard";
 }
 
+export function isFullCustomerSession(user?: AuthUser | null): boolean {
+  if (!user) return false;
+  return user.accountStatus !== "guest" && user.authKind !== "guest_request";
+}
+
 export function isLoggedIn(): boolean {
   if (!getAccessToken()) return false;
   const user = getSessionUser();
   if (!user) return Boolean(getAccessToken());
-  return user.accountStatus !== "guest" && user.authKind !== "guest_request";
+  return isFullCustomerSession(user);
 }
 
 export function hasRequestSession(): boolean {

@@ -11,6 +11,34 @@ internal sealed class InMemoryCatalogStore : ICatalogStore
     public Task<IReadOnlyList<RetreatSnapshot>> ListRetreatsAsync(CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlyList<RetreatSnapshot>>(Retreats.ToArray());
 
+    public Task<CatalogSearchPage> SearchPublishedRetreatsAsync(
+        RetreatSearchQuery query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safeSize = pageSize < 1 ? 24 : pageSize;
+        var matched = CatalogRetreatFilter.Sort(
+            Retreats.Where(retreat => CatalogRetreatFilter.Matches(retreat, query)),
+            query.Sort);
+        var total = matched.Count;
+        var items = matched.Skip((safePage - 1) * safeSize).Take(safeSize).ToArray();
+        return Task.FromResult(new CatalogSearchPage(items, safePage, safeSize, total));
+    }
+
+    public Task<IReadOnlyList<string>> ListPublishedSlugsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<string>>(
+            Retreats.Where(r => r.IsPublic).Select(r => r.Slug).OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToArray());
+
+    public Task<IReadOnlyList<PlaceStatRow>> ListPublishedPlaceStatsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<PlaceStatRow>>(
+            Retreats
+                .Where(r => r.IsPublic)
+                .GroupBy(r => (r.StateSlug, r.LocalitySlug, r.Locality))
+                .Select(g => new PlaceStatRow(g.Key.StateSlug, g.Key.Locality, g.Key.LocalitySlug, g.Count()))
+                .ToArray());
+
     public Task<RetreatSnapshot?> GetBySlugAsync(string slug, CancellationToken cancellationToken)
         => Task.FromResult(Retreats.FirstOrDefault(r => r.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase)));
 

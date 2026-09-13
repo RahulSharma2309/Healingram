@@ -9,7 +9,6 @@ services:
       - "5432:5432"
     volumes:
       - healingram_pg:/var/lib/postgresql/data
-      - ../backend/db/001_schemas.sql:/docker-entrypoint-initdb.d/001_schemas.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U healingram -d healingram"]
       interval: 5s
@@ -51,6 +50,8 @@ services:
     build:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
+      args:
+        VITE_DEMO_MODE: "true"
     ports:
       - "8080:80"
     depends_on:

@@ -8,7 +8,7 @@ Header **Wishlist** is only shown after a password login. They tap a heart on a 
 
 ## My Request (no account)
 
-Header **My Request** while logged out opens `/my-request` (email or mobile + `560142`). A **guest** sees only their request. A **registered** customer is logged in and sent to dashboard Requests. Logged-in **My Request** goes straight to the dashboard.
+Header **My Request** while logged out opens `/my-request` (email or mobile + OTP). A **guest** sees only their request. A **registered** contact who uses OTP still has a scoped guest-request token — they are asked to sign in for the dashboard. Logged-in **My Request** (password session) goes straight to the dashboard.
 
 ## My Trips
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Healingram.BuildingBlocks.Api;
 using Healingram.Contracts.Catalog;
 using Healingram.Modules.Catalog.Domain;
 
@@ -9,22 +10,9 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
     public async Task<IReadOnlyList<NeedDto>> GetNeedsAsync(CancellationToken cancellationToken)
     {
         var records = await store.ListNeedRecordsAsync(cancellationToken);
-        var active = records.Where(r => r.Active).ToArray();
-        if (active.Length > 0)
-        {
-            return active
-                .Select(r => new NeedDto(r.Slug, r.Label, r.Description, r.ImageUrl, r.IconKey, r.SortOrder, r.Kind))
-                .ToArray();
-        }
-
-        var published = await ListPublishedAsync(cancellationToken);
-        return published
-            .SelectMany(r => r.Programmes)
-            .Where(p => ProgrammeRules.IsValid(p.Slug, p.Name) && !string.IsNullOrWhiteSpace(p.NeedSlug))
-            .Select(p => p.NeedSlug)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(NeedCatalog.Label, StringComparer.OrdinalIgnoreCase)
-            .Select(slug => new NeedDto(slug, NeedCatalog.Label(slug)))
+        return records
+            .Where(r => r.Active)
+            .Select(r => new NeedDto(r.Slug, r.Label, r.Description, r.ImageUrl, r.IconKey, r.SortOrder, r.Kind))
             .ToArray();
     }
 
@@ -39,23 +27,16 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
     public async Task<IReadOnlyList<ThemeDto>> GetThemesAsync(CancellationToken cancellationToken)
     {
         var themes = await store.ListThemesAsync(cancellationToken);
-        if (themes.Count > 0)
-        {
-            return themes.Select(t => new ThemeDto(t.Slug, t.Label, t.SortOrder)).ToArray();
-        }
-
-        return NeedCatalog.Labels
-            .Select((kv, index) => new ThemeDto(kv.Key.Replace('-', '_'), kv.Value, index))
-            .ToArray();
+        return themes.Select(t => new ThemeDto(t.Slug, t.Label, t.SortOrder)).ToArray();
     }
 
     public async Task<PlacesResponse> GetPlacesAsync(CancellationToken cancellationToken)
     {
-        var published = await ListPublishedAsync(cancellationToken);
+        var stats = await store.ListPublishedPlaceStatsAsync(cancellationToken);
         var destinations = await store.ListDestinationRecordsAsync(cancellationToken);
         var bySlug = destinations.ToDictionary(d => d.Slug, StringComparer.OrdinalIgnoreCase);
-        var states = published
-            .GroupBy(r => r.StateSlug, StringComparer.OrdinalIgnoreCase)
+        var states = stats
+            .GroupBy(row => row.StateSlug, StringComparer.OrdinalIgnoreCase)
             .OrderBy(g => PlaceNaming.StateLabel(g.Key), StringComparer.OrdinalIgnoreCase)
             .Select(stateGroup =>
             {
@@ -64,9 +45,9 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
                     stateGroup.Key,
                     dest?.Label ?? PlaceNaming.StateLabel(stateGroup.Key),
                     stateGroup
-                        .GroupBy(r => r.LocalitySlug, StringComparer.OrdinalIgnoreCase)
+                        .GroupBy(row => row.LocalitySlug, StringComparer.OrdinalIgnoreCase)
                         .OrderBy(g => g.First().Locality, StringComparer.OrdinalIgnoreCase)
-                        .Select(city => new PlaceCityDto(city.Key, city.First().Locality, city.Count()))
+                        .Select(city => new PlaceCityDto(city.Key, city.First().Locality, city.Sum(item => item.Count)))
                         .ToArray(),
                     dest?.Description,
                     dest?.ImageUrl,
@@ -81,13 +62,24 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
         RetreatSearchQuery query,
         CancellationToken cancellationToken)
     {
-        var published = await ListPublishedAsync(cancellationToken);
-        var needSlugs = NeedCatalog.ExpandNeedFilter(query.Need);
+        var page = await store.SearchPublishedRetreatsAsync(query, 1, 10_000, cancellationToken);
+        return page.Items.Select(ToCard).ToArray();
+    }
 
-        return published
-            .Where(r => MatchesRetreatFilters(r, query, needSlugs))
-            .Select(ToCard)
-            .ToArray();
+    public async Task<PageResult<RetreatCardDto>> SearchPageAsync(
+        RetreatSearchQuery query,
+        int? page,
+        int? pageSize,
+        CancellationToken cancellationToken)
+    {
+        var safePage = page is null or < 1 ? 1 : page.Value;
+        var safeSize = pageSize is null or < 1 ? 24 : Math.Min(pageSize.Value, 100);
+        var result = await store.SearchPublishedRetreatsAsync(query, safePage, safeSize, cancellationToken);
+        return new PageResult<RetreatCardDto>(
+            result.Items.Select(ToCard).ToArray(),
+            result.Page,
+            result.PageSize,
+            result.Total);
     }
 
     public async Task<RetreatListingDto?> GetListingAsync(string slug, CancellationToken cancellationToken)
@@ -101,11 +93,8 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
         return ToListing(retreat);
     }
 
-    public async Task<IReadOnlyList<string>> GetPublicSlugsAsync(CancellationToken cancellationToken)
-    {
-        var published = await ListPublishedAsync(cancellationToken);
-        return published.Select(r => r.Slug).ToArray();
-    }
+    public Task<IReadOnlyList<string>> GetPublicSlugsAsync(CancellationToken cancellationToken)
+        => store.ListPublishedSlugsAsync(cancellationToken);
 
     public async Task<CatalogStayLabels?> GetStayLabelsAsync(
         string retreatSlug,
@@ -135,51 +124,6 @@ internal sealed class CatalogQueryService(ICatalogStore store) : ICatalogQuotePo
             programme.Name,
             null);
     }
-
-    private async Task<IReadOnlyList<RetreatSnapshot>> ListPublishedAsync(CancellationToken cancellationToken)
-    {
-        var all = await store.ListRetreatsAsync(cancellationToken);
-        return all.Where(r => r.IsPublic).ToArray();
-    }
-
-    private static bool MatchesRetreatFilters(
-        RetreatSnapshot retreat,
-        RetreatSearchQuery query,
-        IReadOnlyList<string> needSlugs)
-    {
-        var states = SplitCsv(query.State);
-        if (states.Count > 0
-            && !states.Any(state => retreat.StateSlug.Equals(state, StringComparison.OrdinalIgnoreCase)))
-        {
-            return false;
-        }
-
-        var localities = SplitCsv(query.Locality);
-        if (localities.Count > 0)
-        {
-            var matchesLocality = localities.Any(locality =>
-            {
-                var localitySlug = PlaceNaming.Slugify(locality);
-                return retreat.Locality.Equals(locality, StringComparison.OrdinalIgnoreCase)
-                    || retreat.LocalitySlug.Equals(locality, StringComparison.OrdinalIgnoreCase)
-                    || retreat.LocalitySlug.Equals(localitySlug, StringComparison.OrdinalIgnoreCase);
-            });
-            if (!matchesLocality)
-            {
-                return false;
-            }
-        }
-
-        return retreat.Programmes.Any(p =>
-            ProgrammeRules.IsValid(p.Slug, p.Name)
-            && NeedCatalog.ProgrammeMatchesNeed(p, needSlugs)
-            && DurationFilter.Matches(p, query.Duration));
-    }
-
-    private static IReadOnlyList<string> SplitCsv(string? value)
-        => string.IsNullOrWhiteSpace(value)
-            ? []
-            : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static RetreatCardDto ToCard(RetreatSnapshot retreat)
     {

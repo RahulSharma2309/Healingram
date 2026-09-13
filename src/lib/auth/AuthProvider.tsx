@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const next = await fetchCurrentUser();
       setUser(next);
       setSessionUser(next);
-      if (next.accountStatus !== "guest") {
+      if (next.accountStatus !== "guest" && next.authKind !== "guest_request") {
         try {
           await hydrateWishlistFromServer();
         } catch {

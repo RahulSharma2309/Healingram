@@ -6,6 +6,13 @@ namespace Healingram.Modules.Catalog.Application;
 internal interface ICatalogStore
 {
     Task<IReadOnlyList<RetreatSnapshot>> ListRetreatsAsync(CancellationToken cancellationToken);
+    Task<CatalogSearchPage> SearchPublishedRetreatsAsync(
+        RetreatSearchQuery query,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ListPublishedSlugsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<PlaceStatRow>> ListPublishedPlaceStatsAsync(CancellationToken cancellationToken);
     Task<RetreatSnapshot?> GetBySlugAsync(string slug, CancellationToken cancellationToken);
     Task EnsurePublicSchemaAsync(CancellationToken cancellationToken);
     Task<int> CountRetreatsAsync(CancellationToken cancellationToken);

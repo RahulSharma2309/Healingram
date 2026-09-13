@@ -2,11 +2,13 @@
 
 This is the authoritative V1 security model. Technical-flow pages should describe the journey and link here instead of restating auth rules.
 
+Last reviewed: 13 September 2026, branch `feature/v1-final-foundation-release-readiness`.
+
 ## 1. Authentication
 
 Password login, register, refresh, and logout live in Identity. Access tokens are JWTs (`sub`, `role`, `auth_kind`, `account_status`, optional `purpose` / `request_id`). They do **not** carry email or name. Profile comes from `GET /api/users/me`.
 
-`POST /api/auth/login` may send `portal` (`customer` / `vendor` / `admin`). Vendor login requires a partner or admin role. Admin login requires an admin role. The server rejects the wrong portal even if the password is correct.
+`POST /api/auth/login` may send `portal` (`customer` / `vendor` / `admin`). Admin login requires an admin role. Vendor login requires a partner or admin role **and**, for non-admins, at least one **active** `PartnerMembership` before tokens are issued. A partner role without an approved/active membership does not receive a vendor session. Admins may enter the vendor portal for operational support without a membership. The frontend guard is not sufficient; this check runs in `AuthService.LoginAsync`.
 
 Frontend: access + refresh tokens in `sessionStorage`. `apiFetch` retries once after `POST /api/auth/refresh` on 401. Concurrent 401s share a single in-flight refresh.
 
@@ -63,7 +65,7 @@ If an admin has **no** rows in `identity.admin_permissions`, the role still gran
 
 ## 8. Partner memberships
 
-`partners.partner_users` (`user_id`, `partner_id`, `membership_role`). Status `active` when the partner org is `approved`.
+`partners.partner_users` (`user_id`, `partner_id`, `membership_role`, `status`). Membership is `active` only when the partner org is `approved` **and** `partner_users.status` is `active`. `suspended` / `revoked` memberships keep the row but deny vendor login and `PartnerWrite`. Existing JWTs remain valid until expiry; vendor APIs re-check membership on every request.
 
 ## 9. Resource authorization
 

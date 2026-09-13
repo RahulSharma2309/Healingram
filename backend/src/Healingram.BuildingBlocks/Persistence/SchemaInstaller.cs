@@ -6,6 +6,9 @@ namespace Healingram.BuildingBlocks.Persistence;
 
 public sealed class SchemaInstaller(IConfiguration configuration, ILogger<SchemaInstaller> logger)
 {
+    internal const long MigrationAdvisoryLockKey = 872314001;
+    internal static string AdvisoryLockSql => $"SELECT pg_advisory_lock({MigrationAdvisoryLockKey})";
+
     public async Task EnsureCreatedAsync(CancellationToken cancellationToken)
     {
         var connectionString = configuration.GetConnectionString("Postgres")
@@ -16,6 +19,13 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
+        // Session-level lock so two API instances cannot apply the same pending
+        // script at once. The lock is released when this connection closes.
+        await using (var lockCommand = new NpgsqlCommand(AdvisoryLockSql, connection))
+        {
+            await lockCommand.ExecuteScalarAsync(cancellationToken);
+        }
+
         await EnsureMigrationsTableAsync(connection, cancellationToken);
 
         var applied = await LoadAppliedAsync(connection, cancellationToken);

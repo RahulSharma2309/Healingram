@@ -103,16 +103,15 @@ public class LaunchCatalogDataTests
     }
 
     [Fact]
-    public async Task Needs_come_from_published_programmes_not_a_throwaway_list()
+    public async Task Empty_needs_table_does_not_invent_catalogue_labels()
     {
         var store = new InMemoryCatalogStore();
         store.Retreats.Add(RetreatFixtures.Published("only-yoga", "goa", "Anjuna", "yoga"));
-        store.Retreats.Add(RetreatFixtures.Draft("hidden-ayurveda", "kerala", "Kollam", "ayurveda"));
         var catalog = new CatalogQueryService(store);
 
         var needs = await catalog.GetNeedsAsync(CancellationToken.None);
 
-        Assert.Equal("yoga", Assert.Single(needs).Slug);
+        Assert.Empty(needs);
     }
 
     [Fact]

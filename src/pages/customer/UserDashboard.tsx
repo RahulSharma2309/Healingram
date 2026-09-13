@@ -9,7 +9,7 @@ import {
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
 import { formatInr } from "../../lib/money";
-import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
+import { fetchRetreatListing } from "../../lib/api/catalog";
 import { isLoggedIn } from "../../lib/auth";
 import { ProfileDetails } from "./ProfileDetails";
 import { hydrateWishlistFromServer, listWishlistSlugs, subscribeWishlist, toggleWishlist } from "../../lib/wishlist";
@@ -24,8 +24,8 @@ function tabFromQuery(value: string | null): Tab {
 }
 
 export function UserDashboard() {
-  const { byId } = usePublishedRetreats();
   const [searchParams] = useSearchParams();
+  const [wishCards, setWishCards] = useState<Record<string, { name: string; locality: string; stateLabel: string }>>({});
   const [tab, setTab] = useState<Tab>(() => tabFromQuery(searchParams.get("tab")));
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
 
@@ -82,6 +82,29 @@ export function UserDashboard() {
       unsubWish();
     };
   }, []);
+
+  useEffect(() => {
+    if (wishSlugs.length === 0) {
+      setWishCards({});
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      wishSlugs.map(async (slug) => {
+        try {
+          const listing = await fetchRetreatListing(slug);
+          return [slug, { name: listing.name, locality: listing.locality, stateLabel: listing.stateLabel }] as const;
+        } catch {
+          return [slug, { name: slug, locality: "", stateLabel: "" }] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (!cancelled) setWishCards(Object.fromEntries(entries));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wishSlugs]);
 
   if (!isLoggedIn()) {
     return <Navigate to="/login" replace />;
@@ -192,7 +215,7 @@ export function UserDashboard() {
             </p>
           )}
           {wishSlugs.map((slug) => {
-            const retreat = byId.get(slug);
+            const retreat = wishCards[slug];
             return (
               <div
                 key={slug}
@@ -200,12 +223,12 @@ export function UserDashboard() {
               >
                 <div>
                   <p className="font-medium">{retreat?.name ?? slug}</p>
-                  {retreat && (
+                  {retreat?.locality ? (
                     <p className="text-sm text-gray-500">
                       {retreat.locality}
                       {retreat.stateLabel ? `, ${retreat.stateLabel}` : ""}
                     </p>
-                  )}
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-3">
                   <Link to={`/retreats/${slug}`} className="text-sm text-teal-600 font-semibold">

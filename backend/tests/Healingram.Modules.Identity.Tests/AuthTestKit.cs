@@ -1,5 +1,6 @@
 using Healingram.Contracts.Availability;
 using Healingram.Contracts.Otp;
+using Healingram.Contracts.Partners;
 using Healingram.Modules.Identity.Auth;
 using Healingram.Modules.Identity.Auth.Otp;
 using Healingram.Modules.Identity.Data;
@@ -12,7 +13,8 @@ internal static class AuthTestKit
     public static AuthService Create(
         IIdentityStore? store = null,
         IRequestAccessLookup? requestAccess = null,
-        ITokenService? tokens = null)
+        ITokenService? tokens = null,
+        IPartnerAccess? partners = null)
     {
         store ??= new InMemoryIdentityStore();
         var settings = new OtpSettings
@@ -34,6 +36,7 @@ internal static class AuthTestKit
             otp,
             settings,
             NullLogger<AuthService>.Instance,
-            requestAccess);
+            requestAccess,
+            partners: partners);
     }
 }

@@ -5,6 +5,7 @@ export type PageResult<T> = {
   total: number;
 };
 
+/** Operational queues only. Do not use this to download the public catalogue. */
 export async function collectPages<T>(
   fetchPage: (page: number, pageSize: number) => Promise<PageResult<T>>,
   pageSize = 100,

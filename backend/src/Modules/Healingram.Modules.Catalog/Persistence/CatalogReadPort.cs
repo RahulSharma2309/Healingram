@@ -21,7 +21,12 @@ internal sealed class CatalogReadPort(CatalogQueryService queries) : ICatalogRea
                 card.ProgrammeThemes,
                 card.StateSlug,
                 card.Locality,
-                card.TypicalDuration))
+                card.TypicalDuration,
+                card.Name,
+                card.StateLabel,
+                card.ImageUrl,
+                card.PriceFromInr,
+                card.PriceStatus))
             .ToArray();
     }
 

@@ -48,14 +48,23 @@ export function useCatalogDiscovery() {
     let cancelled = false;
     (async () => {
       try {
-        const [discovery, apiNeeds, apiPlaces] = await Promise.all([
-          fetchDiscovery().catch(() => [] as DiscoveryCard[]),
+        const [discoveryResult, apiNeeds, apiPlaces] = await Promise.allSettled([
+          fetchDiscovery(),
           fetchNeeds(),
           fetchPlaces(),
         ]);
+        if (apiNeeds.status === "rejected") {
+          throw apiNeeds.reason;
+        }
+        if (apiPlaces.status === "rejected") {
+          throw apiPlaces.reason;
+        }
+        const discovery = discoveryResult.status === "fulfilled" ? discoveryResult.value : ([] as DiscoveryCard[]);
+        const apiNeedsValue = apiNeeds.value;
+        const apiPlacesValue = apiPlaces.value;
         if (cancelled) return;
         const needCards = discovery.filter((c) => c.surface === "need").map(cardFromDiscovery);
-        setNeeds(needCards.length > 0 ? needCards : apiNeeds.map(cardFromNeed));
+        setNeeds(needCards.length > 0 ? needCards : apiNeedsValue.map(cardFromNeed));
         const destCards = discovery.filter((c) => c.surface === "destination");
         setDestinations(
           destCards.length > 0
@@ -68,7 +77,7 @@ export function useCatalogDiscovery() {
                 image: card.imageUrl ?? "",
                 imageTemporary: false as const,
               }))
-            : statesToJourneys(apiPlaces),
+            : statesToJourneys(apiPlacesValue),
         );
         setSource("api");
       } catch {

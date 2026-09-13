@@ -5,6 +5,11 @@ namespace Healingram.Modules.Payment.Infrastructure;
 
 internal static class PaymentProviderFactory
 {
+    /// <summary>
+    /// Provider selection intentionally fails startup rather than falling back to
+    /// LocalPaymentProvider so production cannot silently settle real payments
+    /// through the development adapter.
+    /// </summary>
     public static IPaymentProvider Create(PaymentSettings settings)
     {
         var configured = PaymentProviders.Normalize(settings.ProviderName);

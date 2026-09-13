@@ -1,7 +1,11 @@
 export type PortalName = "customer" | "vendor" | "admin";
 
+export function parseDemoModeFlag(value: string | undefined | null): boolean {
+  return String(value ?? "").trim().toLowerCase() === "true";
+}
+
 export function isDemoMode(): boolean {
-  return String(import.meta.env.VITE_DEMO_MODE ?? "true").toLowerCase() !== "false";
+  return parseDemoModeFlag(import.meta.env.VITE_DEMO_MODE);
 }
 
 export function customerAppUrl(): string {

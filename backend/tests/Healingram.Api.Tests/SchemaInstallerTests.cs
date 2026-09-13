@@ -29,6 +29,13 @@ public class SchemaInstallerTests
     }
 
     [Fact]
+    public void Concurrent_startup_uses_a_fixed_advisory_lock()
+    {
+        Assert.Equal(872314001, SchemaInstaller.MigrationAdvisoryLockKey);
+        Assert.Contains("pg_advisory_lock(872314001)", SchemaInstaller.AdvisoryLockSql, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Migration_id_is_the_filename()
     {
         Assert.Equal("011_enterprise_hardening.sql", SchemaInstaller.MigrationId("backend/db/011_enterprise_hardening.sql"));

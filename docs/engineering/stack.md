@@ -22,7 +22,7 @@ Website env: `VITE_API_BASE_URL=http://localhost:5000`. The browser **never** ta
 `Identity` · `Catalog` · `Matching` · `Availability` · `Booking` · `Payment` · `Leads` · `Partners`  
 Plus building-blocks: schema installer, outbox, correlation, health.
 
-SQL files: `backend/db/001_schemas.sql` … `013_enterprise_foundation_completion.sql`, applied once via `public.schema_migrations`. Provider ports: `IOtpProvider`, `IPaymentProvider`, `IInventoryProvider`.
+SQL files: `backend/db/001_schemas.sql` … `014_catalog_query_readiness.sql`, applied once via `public.schema_migrations` under `pg_advisory_lock`. Provider ports: `IOtpProvider`, `IPaymentProvider`, `IInventoryProvider`.
 
 ## What we deliberately did not add in V1
 

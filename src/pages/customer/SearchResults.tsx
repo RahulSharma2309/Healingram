@@ -11,46 +11,38 @@ export function SearchResults() {
   const { pathname } = useLocation();
   const needId = params.get("need");
   const locationParam = params.get("location") || "";
-  const { retreats: inventory, needs, source } = usePublishedRetreats({
+  const page = Math.max(1, Number(params.get("page") || "1") || 1);
+  const { retreats: inventory, needs, places, source, total, pageCount } = usePublishedRetreats({
     need: needId ?? undefined,
     locality: locationParam || undefined,
     state: locationParam || undefined,
+    page,
   });
   const checkIn = params.get("checkIn") || "";
   const checkOut = params.get("checkOut") || "";
 
   const needLabel = needs.find((need) => need.slug === needId)?.label;
 
-  const needMatches = inventory;
-
-  const locationGroups = useMemo(() => {
-    const regions = new Map<string, { region: string; regionLabel: string; localities: string[] }>();
-    for (const retreat of needMatches) {
-      const group = regions.get(retreat.region) ?? {
-        region: retreat.region,
-        regionLabel: retreat.stateLabel ?? retreat.region,
-        localities: [],
-      };
-      if (!group.localities.includes(retreat.locality)) group.localities.push(retreat.locality);
-      regions.set(retreat.region, group);
-    }
-    return [...regions.values()].map((group) => ({
-      region: group.region,
-      regionLabel: group.regionLabel,
-      options: group.localities.map((locality) => ({
-        locality,
-        count: needMatches.filter((retreat) => retreat.locality === locality).length,
+  const locationGroups = useMemo(
+    () =>
+      places.map((group) => ({
+        region: group.slug,
+        regionLabel: group.label,
+        options: group.cities.map((city) => ({
+          locality: city.label,
+          count: city.count,
+        })),
       })),
-    }));
-  }, [needMatches]);
+    [places],
+  );
 
   const locationValid =
     !locationParam ||
-    needMatches.some(
-      (retreat) =>
-        retreat.locality === locationParam ||
-        retreat.region === locationParam ||
-        retreat.stateLabel === locationParam,
+    places.some(
+      (group) =>
+        group.slug === locationParam ||
+        group.label === locationParam ||
+        group.cities.some((city) => city.slug === locationParam || city.label === locationParam),
     );
   const location = locationValid ? locationParam : "";
 
@@ -101,7 +93,7 @@ export function SearchResults() {
     );
   }
 
-  const noInventoryForNeed = needMatches.length === 0 && Boolean(needId);
+  const noInventoryForNeed = total === 0 && Boolean(needId);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -142,7 +134,7 @@ export function SearchResults() {
 
       {!noInventoryForNeed && (
         <p className="text-sm text-gray-600 mt-4 mb-5">
-          {results.length} {results.length === 1 ? "retreat" : "retreats"}
+          {total} {total === 1 ? "retreat" : "retreats"}
           {needLabel ? ` for ${needLabel}` : ""}
           {location ? ` in ${location}` : ""}
           {checkIn || checkOut ? ` · dates saved for availability request` : ""}
@@ -171,11 +163,33 @@ export function SearchResults() {
           </div>
         </div>
       ) : (
+        <>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {results.map((r) => (
             <LaunchRetreatCard key={r.id} retreat={r} />
           ))}
         </div>
+        {pageCount > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => updateParams({ page: page > 2 ? String(page - 1) : null })}
+              className="rounded-xl border border-sand-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={page >= pageCount}
+              onClick={() => updateParams({ page: String(page + 1) })}
+              className="rounded-xl bg-teal-600 text-white px-4 py-2 text-sm font-semibold disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

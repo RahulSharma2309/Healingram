@@ -5,7 +5,7 @@ Programme-led retreat marketplace.
 - `src/` is the canonical React frontend (presentation only).
 - `backend/` is the canonical modular monolith.
 - PostgreSQL is the business source of truth.
-- `ui-reference` is deprecated and removed from this branch.
+- `ui-reference/` is a design-only snapshot. Do not import it from `src/`.
 
 The site talks to the gateway. **Documentation:** [`docs/README.md`](docs/README.md).
 

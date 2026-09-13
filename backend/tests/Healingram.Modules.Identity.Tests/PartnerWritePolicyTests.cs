@@ -46,6 +46,39 @@ public class PartnerWritePolicyTests
         Assert.True(adminAllowed.Succeeded);
     }
 
+    [Fact]
+    public async Task Partner_token_without_active_membership_cannot_satisfy_partner_write()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IPartnerAccess, EmptyPartnerAccess>();
+        services.AddSingleton<IAdminAuthorization, AllowAllAdminAuthorization>();
+        IdentityAuthorization.AddPolicies(services);
+        await using var provider = services.BuildServiceProvider();
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+
+        var partner = await authorization.AuthorizeAsync(Principal(Roles.Partner), IdentityPolicies.PartnerWrite);
+
+        Assert.False(partner.Succeeded);
+    }
+
+    private sealed class EmptyPartnerAccess : IPartnerAccess
+    {
+        public Task<IReadOnlyList<string>> ListRetreatSlugsForUserAsync(Guid userId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task<bool> CanAccessRetreatAsync(Guid userId, string retreatSlug, CancellationToken cancellationToken)
+            => Task.FromResult(false);
+
+        public Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(Guid userId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<PartnerMembership>>([
+                new PartnerMembership(Guid.NewGuid(), "Revoked Partner", "member", "revoked")
+            ]);
+
+        public Task<bool> CanAccessPartnerAsync(Guid userId, Guid partnerId, CancellationToken cancellationToken)
+            => Task.FromResult(false);
+    }
+
     private static ClaimsPrincipal Principal(string role)
         => new(new ClaimsIdentity(
             [

@@ -2,6 +2,8 @@
 
 You already have the **shape** of production: static website + gateway + API + Postgres. Deploy is packaging that, not inventing a new system.
 
+Full operator checklist: [../deployment-guide.md](../deployment-guide.md). Production will not start until real OTP/payment/inventory adapters exist (or explicit allow flags — do not set those on the internet).
+
 ## Do this in order
 
 1. **You click the local product** and say it is good enough.

@@ -4,6 +4,11 @@ namespace Healingram.Modules.Identity.Auth.Otp;
 
 internal static class OtpProviderFactory
 {
+    /// <summary>
+    /// Provider selection intentionally fails startup rather than falling back to
+    /// LocalOtpProvider so production cannot silently send real OTP traffic through
+    /// the development adapter.
+    /// </summary>
     public static IOtpProvider Create(OtpSettings settings)
     {
         var configured = OtpProviders.Normalize(settings.Provider);

@@ -18,3 +18,5 @@ JSON is camelCase. The website sends `Authorization: Bearer <access>` after logi
 | [10-admin.md](10-admin.md) | Admin queue |
 
 Modules do **not** join each other’s tables. Availability talks to catalog/booking/partners through in-process ports, not SQL across schemas.
+
+Also see [../product-journeys.md](../product-journeys.md), [../api-reference.md](../api-reference.md), and [../system-traceability.md](../system-traceability.md).

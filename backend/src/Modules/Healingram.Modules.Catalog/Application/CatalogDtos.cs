@@ -1,3 +1,5 @@
+using Healingram.Modules.Catalog.Domain;
+
 namespace Healingram.Modules.Catalog.Application;
 
 internal sealed record NeedDto(
@@ -73,7 +75,25 @@ internal sealed record PriceQuoteDto(
 
 internal sealed record PlacesResponse(IReadOnlyList<PlaceStateDto> States);
 
-internal sealed record RetreatSearchQuery(string? Need, string? State, string? Locality, string? Duration);
+internal sealed record RetreatSearchQuery(
+    string? Need,
+    string? State,
+    string? Locality,
+    string? Duration,
+    string? Theme = null,
+    string? Programme = null,
+    string? RetreatType = null,
+    decimal? MinPriceInr = null,
+    decimal? MaxPriceInr = null,
+    string? Sort = null);
+
+internal sealed record CatalogSearchPage(
+    IReadOnlyList<RetreatSnapshot> Items,
+    int Page,
+    int PageSize,
+    int Total);
+
+internal sealed record PlaceStatRow(string StateSlug, string Locality, string LocalitySlug, int Count);
 
 internal sealed class RetreatCardDto
 {

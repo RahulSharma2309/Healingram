@@ -11,3 +11,6 @@ How this app is built, how you take it off the laptop, and what it roughly costs
 | [security-and-authorization.md](security-and-authorization.md) | Auth, portals, admin permissions, providers |
 | [scale-and-availability.md](scale-and-availability.md) | “Will it stay up if people actually come?” |
 | [cost.md](cost.md) | “What will I pay per month to go live?” |
+| [../deployment-guide.md](../deployment-guide.md) | Full local / staging / production deploy |
+| [../production-infrastructure-and-cost.md](../production-infrastructure-and-cost.md) | Cloud options and usage vs fixed cost |
+| [../provider-architecture.md](../provider-architecture.md) | How to add Razorpay / Twilio / inventory |

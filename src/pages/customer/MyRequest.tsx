@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { GuestVerifyForm } from "../../components/account/GuestVerifyForm";
 import { fetchMyAvailabilityRequests } from "../../lib/api/availability";
-import { applyAuthUser, hasRequestSession, isGuestAccountStatus, isLoggedIn } from "../../lib/auth";
+import { applyAuthUser, hasRequestSession, isFullCustomerSession, isLoggedIn } from "../../lib/auth";
+import { getSessionUser } from "../../lib/session";
 import {
   mergeServerAvailability,
   type AvailabilityRequest,
@@ -62,10 +63,8 @@ export function MyRequest() {
               return;
             }
             applyAuthUser(session.user);
-            if (!isGuestAccountStatus(session.user.accountStatus)) {
-              navigate("/dashboard?tab=requests", { replace: true });
-              return;
-            }
+            // OTP always issues a guest_request token. A registered accountStatus
+            // must not be treated as a full password session.
             void loadMine();
           }}
         />
@@ -111,6 +110,15 @@ export function MyRequest() {
     <div className="max-w-2xl mx-auto px-4 py-10">
       <h1 className="font-display text-2xl font-bold text-sage-800">My Request</h1>
       <p className="mt-2 text-sm text-sage-600">Requests linked to the email or mobile you just verified.</p>
+      {getSessionUser() && !isFullCustomerSession(getSessionUser()) && getSessionUser()?.accountStatus === "registered" ? (
+        <p className="mt-3 text-sm text-sage-600">
+          This verification only opens this request.{" "}
+          <Link to="/login" className="text-teal-700 underline">
+            Sign in
+          </Link>{" "}
+          to see your full account, trips, and wishlist.
+        </p>
+      ) : null}
       <div className="mt-8 space-y-3">
         {requests.map((request) => (
           <div
