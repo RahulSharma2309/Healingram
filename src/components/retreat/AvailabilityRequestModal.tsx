@@ -1,24 +1,16 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Check, X } from "lucide-react";
-import { getProgrammePricing } from "../../data/programmePricing";
+import { IndiaPhoneField } from "../account/IndiaPhoneField";
+import { nationalPhone } from "../../lib/accountValidation";
+import { quoteProgrammePrice } from "../../lib/api/catalog";
+import { apiErrorMessage } from "../../lib/api/client";
 import {
   createAvailabilityRequest,
   type AvailabilityRequestSource,
 } from "../../lib/availabilityRequests";
-import {
-  getCustomerId,
-  getCustomerProfile,
-  isLoggedIn,
-  saveCustomerProfile,
-} from "../../lib/auth";
-import {
-  addNights,
-  buildPriceSnapshot,
-  calculateProgrammeTotal,
-  formatDisplayDate,
-  nightsBetween,
-} from "../../lib/pricing";
+import { getCustomerProfile, isLoggedIn } from "../../lib/auth";
+import { addNights, formatDisplayDate, nightsBetween } from "../../lib/pricing";
 
 export type AvailabilityDraft = {
   retreatId: string;
@@ -33,6 +25,7 @@ export type AvailabilityDraft = {
   occupancy: string;
   roomType: string;
   displayedPrice: string;
+  quoteId?: string;
   source?: AvailabilityRequestSource;
   /** Collect start date / guests in this modal before requesting */
   needsBookingDetails?: boolean;
@@ -66,8 +59,7 @@ export function AvailabilityRequestModal({
 
   const [name, setName] = useState(profile.name);
   const [email, setEmail] = useState(profile.email);
-  const [phone, setPhone] = useState(profile.phone);
-  const [countryCode, setCountryCode] = useState(profile.countryCode || "+91");
+  const [phone, setPhone] = useState(nationalPhone(profile.phone));
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -78,7 +70,6 @@ export function AvailabilityRequestModal({
   );
   const [localGuests, setLocalGuests] = useState(String(draft.guests || 2));
 
-  const pricing = getProgrammePricing(draft.retreatId, draft.programmeId);
   const minCheckIn = draft.minCheckIn ?? new Date().toISOString().slice(0, 10);
   const needsDetails = Boolean(draft.needsBookingDetails);
 
@@ -98,36 +89,14 @@ export function AvailabilityRequestModal({
 
   const guestCount = Math.floor(Number(localGuests)) || 1;
 
-  const livePriceLabel = useMemo(() => {
-    if (!pricing) return draft.displayedPrice;
-    const calc = calculateProgrammeTotal(pricing, guestCount, "auto");
-    if (calc?.base != null) {
-      const nights = draft.isFlexible
-        ? nightsBetween(localCheckIn, localFlexibleOut)
-        : draft.durationNights;
-      if (!nights || !localCheckIn) {
-        return `From ₹${calc.base.toLocaleString("en-IN")}`;
-      }
-      return `₹${calc.base.toLocaleString("en-IN")}`;
-    }
-    return draft.displayedPrice;
-  }, [
-    pricing,
-    draft.displayedPrice,
-    draft.isFlexible,
-    draft.durationNights,
-    localCheckIn,
-    localFlexibleOut,
-    guestCount,
-  ]);
+  const livePriceLabel = draft.displayedPrice;
 
   useEffect(() => {
     if (!open) return;
     const p = getCustomerProfile();
     setName(p.name);
     setEmail(p.email);
-    setPhone(p.phone);
-    setCountryCode(p.countryCode || "+91");
+    setPhone(nationalPhone(p.phone));
     setNotes("");
     setError(null);
     setLocalCheckIn(draft.checkIn);
@@ -137,7 +106,7 @@ export function AvailabilityRequestModal({
 
   if (!open) return null;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!localCheckIn) {
@@ -167,15 +136,10 @@ export function AvailabilityRequestModal({
       setError("Please choose number of guests.");
       return;
     }
-    if (!name.trim() || !email.trim() || !phone.trim()) {
-      setError("Please enter your name, email and mobile number.");
+    if (!name.trim() || !email.trim() || phone.length !== 10) {
+      setError("Please enter your name, email and 10-digit mobile number.");
       return;
     }
-    if (!pricing) {
-      setError("Programme pricing record not found.");
-      return;
-    }
-
     const nights = draft.isFlexible
       ? nightsBetween(localCheckIn, localFlexibleOut)
       : draft.durationNights;
@@ -189,12 +153,6 @@ export function AvailabilityRequestModal({
     }
 
     setSubmitting(true);
-    saveCustomerProfile({
-      name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim(),
-      countryCode,
-    });
 
     onBookingDetailsChange?.({
       checkIn: localCheckIn,
@@ -202,47 +160,65 @@ export function AvailabilityRequestModal({
       guests: guestCount,
     });
 
-    const calc = calculateProgrammeTotal(pricing, guestCount, "auto");
-    const snapshot = buildPriceSnapshot({
-      row: pricing,
-      guests: guestCount,
-      nights,
-      occupancyPreference:
-        calc?.occupancy === "single"
-          ? "single"
-          : calc?.occupancy === "double"
-            ? "double"
-            : "auto",
-    });
-
-    const request = createAvailabilityRequest({
-      customerId: getCustomerId(),
-      customerName: name.trim(),
-      customerEmail: email.trim(),
-      customerPhone: phone.trim(),
-      countryCode,
-      retreatId: draft.retreatId,
-      retreatName: draft.retreatName,
-      programmeId: draft.programmeId,
-      programmeName: draft.programmeName,
-      durationNights: nights,
-      durationUnit: draft.durationUnit,
-      checkIn: localCheckIn,
-      checkOut: resolvedCheckOut,
-      guests: guestCount,
-      occupancy: calc?.occupancy ?? draft.occupancy,
-      roomType: calc?.roomType ?? draft.roomType,
-      displayedPrice: livePriceLabel,
-      priceStatus: pricing.priceStatus,
-      priceSnapshot: snapshot,
-      settlementMode: pricing.settlementMode,
-      source: draft.source ?? "listing",
-      customerNotes: notes.trim(),
-    });
-
-    setSubmitting(false);
-    onClose();
-    navigate(`/requests/${request.requestId}/received`);
+    try {
+      const quote = await quoteProgrammePrice({
+        retreatSlug: draft.retreatId,
+        programmeSlug: draft.programmeId,
+        durationNights: nights,
+        occupancy: draft.occupancy || "package",
+        guests: guestCount,
+      });
+      const request = await createAvailabilityRequest({
+        customerId: null,
+        customerName: name.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone,
+        countryCode: "+91",
+        retreatId: draft.retreatId,
+        retreatName: draft.retreatName,
+        programmeId: draft.programmeId,
+        programmeName: draft.programmeName,
+        durationNights: nights,
+        durationUnit: draft.durationUnit,
+        checkIn: localCheckIn,
+        checkOut: resolvedCheckOut,
+        guests: guestCount,
+        occupancy: quote.occupancy,
+        roomType: draft.roomType,
+        displayedPrice: livePriceLabel,
+        priceStatus:
+          quote.priceStatus === "VERIFIED" || quote.priceStatus === "ESTIMATED"
+            ? quote.priceStatus
+            : "ON_REQUEST",
+        priceSnapshot: {
+          priceStatus:
+            quote.priceStatus === "VERIFIED" || quote.priceStatus === "ESTIMATED"
+              ? quote.priceStatus
+              : "ON_REQUEST",
+          baseAmount: quote.baseAmount ?? null,
+          taxAmount: quote.taxAmount ?? null,
+          taxDisplay: "not_confirmed",
+          totalAmount: quote.totalAmount ?? null,
+          occupancy: quote.occupancy,
+          roomType: draft.roomType,
+          durationNights: nights,
+          guests: guestCount,
+          currency: "INR",
+          label: livePriceLabel,
+          capturedAt: new Date().toISOString(),
+        },
+        settlementMode: "MARKETPLACE_SPLIT",
+        source: draft.source ?? "listing",
+        customerNotes: notes.trim(),
+        quoteId: quote.quoteId,
+      });
+      onClose();
+      navigate(`/requests/${request.requestId}/received`);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -366,9 +342,12 @@ export function AvailabilityRequestModal({
             </div>
           )}
 
+          <p className="text-sm text-sage-600">
+            No payment yet. We’ll check availability with the retreat.
+          </p>
           {!loggedIn && (
             <p className="text-xs text-sage-500">
-              You’re not logged in — we’ll link this request to your email and phone.
+              No account needed. We’ll link this request to your email and mobile.
             </p>
           )}
 
@@ -392,32 +371,7 @@ export function AvailabilityRequestModal({
                 className="mt-1 w-full rounded-xl border border-sand-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
               />
             </label>
-            <div className="grid grid-cols-[100px_1fr] gap-2">
-              <label className="block">
-                <span className="text-xs font-medium text-sage-600">Code</span>
-                <select
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-sand-200 px-2 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
-                >
-                  <option value="+91">+91</option>
-                  <option value="+1">+1</option>
-                  <option value="+44">+44</option>
-                  <option value="+971">+971</option>
-                  <option value="+65">+65</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-sage-600">Mobile number</span>
-                <input
-                  required
-                  inputMode="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-sand-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/30"
-                />
-              </label>
-            </div>
+            <IndiaPhoneField value={phone} onChange={setPhone} />
             <label className="block">
               <span className="text-xs font-medium text-sage-600">
                 Anything the retreat should know? (optional)

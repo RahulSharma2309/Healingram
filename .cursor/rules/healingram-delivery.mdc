@@ -1,0 +1,29 @@
+---
+description: Healingram V1 delivery — agents, docs, and definition of done
+alwaysApply: true
+---
+
+# Healingram V1 delivery
+
+Programme-led retreat marketplace. Living docs: `docs/README.md`.
+
+## Agents
+
+Load the matching skill before that role’s work:
+
+- PO: `.cursor/skills/healingram-product-owner/SKILL.md`
+- Developer: `.cursor/skills/healingram-software-developer/SKILL.md`
+- QA: `.cursor/skills/healingram-qa/SKILL.md`
+- QA+PO UAT: `.cursor/skills/healingram-qa-po-uat/SKILL.md`
+
+## Docs win
+
+`docs/po-flows/` (product), `docs/technical-flows/` (APIs/tables), `docs/engineering/` (deploy/cost).  
+`Healingram_Developer_Functional_Specification_V1.docx` for original V1 behaviour.  
+Human overrides: inventory-driven geography, published inventory as the ceiling, local UAT first, no create-retreat CMS, **webhook-only paid**.
+
+Modular monolith, not microservices.
+
+## Done
+
+Code + tests → CI green → cases in `docs/test-cases/` → human click on localhost.

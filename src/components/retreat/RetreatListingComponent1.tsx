@@ -5,14 +5,13 @@ import {
   TRUST_SIGNAL_LABELS,
   type RetreatListingView,
   type RetreatProgrammeOption,
-} from "../../data/launchListing";
-import { getProgrammePricing } from "../../data/programmePricing";
+} from "../../lib/listingTypes";
+import { quoteProgrammePrice, type PriceQuote } from "../../lib/api/catalog";
 import {
   addNights,
-  buildProgressivePriceView,
-  calculateProgrammeTotal,
   formatDisplayDate,
   nightsBetween,
+  viewFromQuote,
 } from "../../lib/pricing";
 import {
   AvailabilityRequestModal,
@@ -75,6 +74,8 @@ export function RetreatListingComponent1({ listing }: Props) {
   const [galleryNote, setGalleryNote] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [draft, setDraft] = useState<AvailabilityDraft | null>(null);
+  const [quote, setQuote] = useState<PriceQuote | null>(null);
+  const [quoting, setQuoting] = useState(false);
 
   const formId = useId();
   const minCheckIn = todayIsoDate();
@@ -86,13 +87,7 @@ export function RetreatListingComponent1({ listing }: Props) {
     [programmeOptions, programmeId],
   );
 
-  const pricingRow = useMemo(() => {
-    if (!programmeId) return null;
-    return getProgrammePricing(retreat.id, programmeId) ?? null;
-  }, [retreat.id, programmeId]);
-
-  const isFlexible = pricingRow?.durationMode === "flexible";
-  const durationUnit = pricingRow?.durationUnit ?? selectedProgramme?.durationUnit ?? "nights";
+  const isFlexible = selectedProgramme?.durationMode === "flexible";
   const guestCount =
     guestMode === "group"
       ? Math.floor(Number(groupSeats))
@@ -125,13 +120,12 @@ export function RetreatListingComponent1({ listing }: Props) {
         : durationNights != null && durationNights > 0),
   );
 
-  const priceView = buildProgressivePriceView({
-    programmeSelected: Boolean(programmeId && pricingRow),
-    row: pricingRow,
-    guests: guestCount,
-    nights: isFlexible ? nights : durationNights,
+  const priceView = viewFromQuote({
+    programmeSelected: Boolean(programmeId && selectedProgramme),
     datesComplete,
-    occupancyPreference,
+    quote,
+    quoting,
+    fromLabel: listing.priceLabel,
   });
 
   const canSubmit =
@@ -140,19 +134,58 @@ export function RetreatListingComponent1({ listing }: Props) {
     guestsValid &&
     Boolean(checkOut) &&
     (isFlexible
-      ? nights != null && nights >= (pricingRow?.minimumStay ?? 1)
+      ? nights != null && nights >= 1
       : durationNights != null &&
-        (pricingRow?.supportedDurations.includes(durationNights) ?? false));
+        (selectedProgramme?.supportedDurations.includes(durationNights) ?? false));
 
-  // Keep duration in sync if catalogue options change; programme change sets duration synchronously
   useEffect(() => {
-    if (!selectedProgramme || !pricingRow) return;
-    if (pricingRow.durationMode === "flexible") return;
+    if (!selectedProgramme) return;
+    if (selectedProgramme.durationMode === "flexible") return;
     const durations = selectedProgramme.supportedDurations;
     if (durations.length === 1 && durationNights !== durations[0]) {
       setDurationNights(durations[0]);
     }
-  }, [selectedProgramme, pricingRow, durationNights]);
+  }, [selectedProgramme, durationNights, setDurationNights]);
+
+  useEffect(() => {
+    if (!programmeId || !datesComplete || !guestsValid) {
+      setQuote(null);
+      return;
+    }
+    const nightsForQuote = isFlexible ? nights : durationNights;
+    if (!nightsForQuote) return;
+    let cancelled = false;
+    setQuoting(true);
+    quoteProgrammePrice({
+      retreatSlug: retreat.id,
+      programmeSlug: programmeId,
+      durationNights: nightsForQuote,
+      occupancy: occupancyPreference === "auto" ? "package" : occupancyPreference,
+      guests: guestCount,
+    })
+      .then((next) => {
+        if (!cancelled) setQuote(next);
+      })
+      .catch(() => {
+        if (!cancelled) setQuote(null);
+      })
+      .finally(() => {
+        if (!cancelled) setQuoting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    programmeId,
+    datesComplete,
+    guestsValid,
+    isFlexible,
+    nights,
+    durationNights,
+    occupancyPreference,
+    guestCount,
+    retreat.id,
+  ]);
   useEffect(() => {
     if (!checkIn) {
       setDateError(null);
@@ -168,15 +201,15 @@ export function RetreatListingComponent1({ listing }: Props) {
         return;
       }
       const n = nightsBetween(checkIn, flexibleCheckOut);
-      if (flexibleCheckOut && n != null && pricingRow && n < pricingRow.minimumStay) {
-        setDateError(`Minimum stay is ${pricingRow.minimumStay} nights.`);
+      if (flexibleCheckOut && n != null && n < 1) {
+        setDateError("End date must be after the start date.");
         return;
       }
       setDateError(null);
       return;
     }
     setDateError(null);
-  }, [checkIn, flexibleCheckOut, isFlexible, minCheckIn, pricingRow]);
+  }, [checkIn, flexibleCheckOut, isFlexible, minCheckIn]);
 
   const displayedPriceLabel =
     priceView.kind === "total"
@@ -192,17 +225,13 @@ export function RetreatListingComponent1({ listing }: Props) {
 
     const selected =
       programmeOptions.find((p) => p.id === effectiveProgrammeId) ?? selectedProgramme;
-    const row =
-      effectiveProgrammeId
-        ? getProgrammePricing(retreat.id, effectiveProgrammeId) ?? null
-        : pricingRow;
 
-    if (!effectiveProgrammeId || !row || !selected) {
+    if (!effectiveProgrammeId || !selected) {
       setValidationHint("Select a programme, start date and guests to continue.");
       return;
     }
 
-    const flexible = row.durationMode === "flexible";
+    const flexible = selected.durationMode === "flexible";
     if (!flexible && effectiveDuration == null) {
       setValidationHint("Select a programme duration to continue.");
       return;
@@ -216,7 +245,7 @@ export function RetreatListingComponent1({ listing }: Props) {
           : checkOut;
 
     const nightsForDraft = flexible
-      ? nightsBetween(checkIn, flexibleCheckOut) ?? row.minimumStay
+      ? nightsBetween(checkIn, flexibleCheckOut) ?? 1
       : effectiveDuration!;
 
     const datesOk = Boolean(
@@ -228,20 +257,8 @@ export function RetreatListingComponent1({ listing }: Props) {
         derivedCheckOut,
     );
     const complete = datesOk && guestsValid;
-
-    const calc = calculateProgrammeTotal(row, guestCount, occupancyPreference);
-    const priceViewNow = buildProgressivePriceView({
-      programmeSelected: true,
-      row,
-      guests: guestCount,
-      nights: flexible ? nightsBetween(checkIn, flexibleCheckOut) : effectiveDuration,
-      datesComplete: datesOk,
-      occupancyPreference,
-    });
     const priceLabel =
-      priceViewNow.kind === "total" || priceViewNow.kind === "from"
-        ? priceViewNow.label
-        : priceViewNow.message;
+      priceView.kind === "total" || priceView.kind === "from" ? priceView.label : priceView.message;
 
     setValidationHint(null);
     setDraft({
@@ -253,15 +270,16 @@ export function RetreatListingComponent1({ listing }: Props) {
       checkOut: derivedCheckOut || "",
       guests: guestCount,
       durationNights: nightsForDraft,
-      durationUnit: row.durationUnit ?? "nights",
-      occupancy: calc?.occupancy ?? "pending",
-      roomType: roomName || calc?.roomType || row.roomType,
+      durationUnit: selected.durationUnit ?? "nights",
+      occupancy: quote?.occupancy ?? occupancyPreference,
+      roomType: roomName,
       displayedPrice: priceLabel,
+      quoteId: quote?.quoteId,
       source: matchState ? "find_my_match" : "listing",
       needsBookingDetails: !complete,
       isFlexible: flexible,
       minCheckIn,
-      minimumStay: row.minimumStay,
+      minimumStay: 1,
     });
     setModalOpen(true);
   };
@@ -283,8 +301,7 @@ export function RetreatListingComponent1({ listing }: Props) {
     setValidationHint(null);
     setFlexibleCheckOut("");
     const opt = programmeOptions.find((p) => p.id === id);
-    const row = id ? getProgrammePricing(retreat.id, id) : null;
-    if (!opt || !row || row.durationMode === "flexible") {
+    if (!opt || opt.durationMode === "flexible") {
       setDurationNights(null);
       return;
     }
@@ -441,7 +458,7 @@ export function RetreatListingComponent1({ listing }: Props) {
           <div className="hidden lg:flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={openAvailability}
+              onClick={() => openAvailability()}
               disabled={!canSubmit}
               className="inline-flex items-center justify-center rounded-xl bg-teal-600 px-6 py-3 text-sm font-semibold text-white hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -538,7 +555,7 @@ export function RetreatListingComponent1({ listing }: Props) {
 
             <button
               type="button"
-              onClick={openAvailability}
+              onClick={() => openAvailability()}
               disabled={!canSubmit}
               className="mt-5 w-full rounded-xl bg-teal-600 py-3.5 text-sm font-semibold text-white hover:bg-teal-500 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -640,7 +657,7 @@ export function RetreatListingComponent1({ listing }: Props) {
           </div>
           <button
             type="button"
-            onClick={openAvailability}
+            onClick={() => openAvailability()}
             disabled={!canSubmit}
             className="shrink-0 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50"
           >
@@ -674,7 +691,7 @@ export function RetreatListingComponent1({ listing }: Props) {
 function PriceBlock({
   view,
 }: {
-  view: ReturnType<typeof buildProgressivePriceView>;
+  view: ReturnType<typeof viewFromQuote>;
 }) {
   if (view.kind === "total") {
     return (

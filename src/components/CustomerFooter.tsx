@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { vendorPortalHref } from "../lib/runtimeConfig";
 import healingramMark from "../assets/healingram-mark.png";
 
 export function CustomerFooter() {
@@ -81,9 +82,9 @@ export function CustomerFooter() {
             <p className="font-semibold text-white mb-3">For retreat partners</p>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link to="/vendor" className="hover:text-white transition-colors">
+                <a href={vendorPortalHref()} className="hover:text-white transition-colors">
                   Partner with Healingram
-                </Link>
+                </a>
               </li>
             </ul>
           </div>

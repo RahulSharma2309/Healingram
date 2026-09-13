@@ -1,45 +1,90 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Calendar, Heart, User } from "lucide-react";
+import { fetchTrips } from "../../lib/api/account";
 import {
   listAvailabilityRequests,
   listCustomerTrips,
+  mergeServerAvailability,
+  refreshMyRequests,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
-import { formatInr } from "../../data/programmePricing";
-import { getCustomerProfile, isLoggedIn } from "../../lib/auth";
+import { formatInr } from "../../lib/money";
+import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
+import { isLoggedIn } from "../../lib/auth";
+import { ProfileDetails } from "./ProfileDetails";
+import { hydrateWishlistFromServer, listWishlistSlugs, subscribeWishlist, toggleWishlist } from "../../lib/wishlist";
 
 type Tab = "trips" | "requests" | "wishlist" | "profile";
 
+function tabFromQuery(value: string | null): Tab {
+  if (value === "trips" || value === "requests" || value === "wishlist" || value === "profile") {
+    return value;
+  }
+  return "requests";
+}
+
 export function UserDashboard() {
-  const [tab, setTab] = useState<Tab>("requests");
+  const { byId } = usePublishedRetreats();
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => tabFromQuery(searchParams.get("tab")));
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
+
+  useEffect(() => {
+    setTab(tabFromQuery(searchParams.get("tab")));
+  }, [searchParams]);
   const [trips, setTrips] = useState<AvailabilityRequest[]>([]);
+  const [wishSlugs, setWishSlugs] = useState<string[]>([]);
 
   useEffect(() => {
     const refresh = () => {
-      const all = listAvailabilityRequests();
-      const profile = getCustomerProfile();
-      const mine = isLoggedIn()
-        ? all.filter(
-            (r) =>
-              (profile.email &&
-                r.customerEmail.toLowerCase() === profile.email.toLowerCase()) ||
-              r.customerName === profile.name,
-          )
-        : all;
-      setRequests(mine);
-      setTrips(
-        listCustomerTrips().filter((r) =>
-          mine.some((m) => m.requestId === r.requestId),
-        ),
-      );
+      setRequests(listAvailabilityRequests());
+      setTrips(listCustomerTrips());
+      setWishSlugs(listWishlistSlugs());
     };
     refresh();
+    if (!isLoggedIn()) {
+      return () => {
+        window.removeEventListener("healingram-requests", refresh);
+      };
+    }
+    void hydrateWishlistFromServer().then(() => setWishSlugs(listWishlistSlugs()));
+    void refreshMyRequests().then(refresh).catch(() => undefined);
+    void fetchTrips()
+      .then((groups) => {
+        const cards = [
+          ...groups.paymentPending,
+          ...groups.upcoming,
+          ...groups.completed,
+          ...groups.cancelled,
+        ];
+        for (const card of cards) {
+          mergeServerAvailability({
+            publicId: card.publicId,
+            status: card.status,
+            retreatSlug: card.retreatSlug,
+            programmeSlug: card.programmeSlug,
+            requestedAt: card.requestedAt,
+            finalAmountInr: card.finalAmountInr,
+          });
+        }
+        refresh();
+      })
+      .catch(() => {
+        /* local trips until GET /api/trips answers */
+      });
     window.addEventListener("healingram-requests", refresh);
-    return () => window.removeEventListener("healingram-requests", refresh);
+    const unsubWish = subscribeWishlist(() => setWishSlugs(listWishlistSlugs()));
+    return () => {
+      window.removeEventListener("healingram-requests", refresh);
+      unsubWish();
+    };
   }, []);
+
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />;
+  }
 
   const tabs: { id: Tab; label: string; icon: typeof Calendar }[] = [
     { id: "requests", label: "Requests", icon: Calendar },
@@ -53,16 +98,15 @@ export function UserDashboard() {
       <h1 className="font-display text-2xl font-bold text-sage-800 mb-6">My dashboard</h1>
       <div className="flex gap-2 mb-8 border-b border-sand-200 overflow-x-auto">
         {tabs.map(({ id, label, icon: Icon }) => (
-          <button
+          <Link
             key={id}
-            type="button"
-            onClick={() => setTab(id)}
+            to={`/dashboard?tab=${id}`}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
               tab === id ? "border-teal-600 text-teal-600" : "border-transparent text-gray-500"
             }`}
           >
             <Icon className="w-4 h-4" /> {label}
-          </button>
+          </Link>
         ))}
       </div>
 
@@ -136,18 +180,48 @@ export function UserDashboard() {
       )}
 
       {tab === "wishlist" && (
-        <p className="text-sm text-sage-500">Wishlist — coming in a later pass.</p>
-      )}
-
-      {tab === "profile" && (
-        <div className="bg-white rounded-xl border border-sand-200 p-6 text-sm text-sage-700">
-          <p>Name: {getCustomerProfile().name || "—"}</p>
-          <p className="mt-1">Email: {getCustomerProfile().email || "—"}</p>
-          <p className="mt-1">
-            Phone: {getCustomerProfile().countryCode} {getCustomerProfile().phone || "—"}
-          </p>
+        <div className="bg-white rounded-xl border border-sand-200 p-6 space-y-3">
+          <h2 className="font-semibold mb-2">Wishlist</h2>
+          {wishSlugs.length === 0 && (
+            <p className="text-sm text-sage-500">
+              Save retreats from the browse page. Sign in to keep them after you change browsers.
+            </p>
+          )}
+          {wishSlugs.map((slug) => {
+            const retreat = byId.get(slug);
+            return (
+              <div
+                key={slug}
+                className="border border-sand-200 rounded-lg p-4 flex items-center justify-between gap-3"
+              >
+                <div>
+                  <p className="font-medium">{retreat?.name ?? slug}</p>
+                  {retreat && (
+                    <p className="text-sm text-gray-500">
+                      {retreat.locality}
+                      {retreat.stateLabel ? `, ${retreat.stateLabel}` : ""}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link to={`/retreats/${slug}`} className="text-sm text-teal-600 font-semibold">
+                    View
+                  </Link>
+                  <button
+                    type="button"
+                    className="text-sm text-sage-600"
+                    onClick={() => void toggleWishlist(slug)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      {tab === "profile" && <ProfileDetails />}
     </div>
   );
 }

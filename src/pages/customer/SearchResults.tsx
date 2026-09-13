@@ -3,49 +3,64 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import { X } from "lucide-react";
 import { LaunchRetreatCard } from "../../components/LaunchRetreatCard";
 import { ResultsFilterBar } from "../../components/ResultsFilterBar";
-import {
-  filterLaunchRetreats,
-  getAvailableLocationGroups,
-  getHeroDiscoveryByProgramme,
-  getNeedLabel,
-  getProgrammesForNeedId,
-  isLocationValidForProgramme,
-  type LaunchProgrammeTheme,
-} from "../../data/launchSupply";
+import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
+import { filterBrowseRetreats } from "../../lib/browse";
+import { titleFromSlug } from "../../lib/catalogTypes";
 
 export function SearchResults() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { retreats: inventory, needs, needThemeMap, source } = usePublishedRetreats();
 
   const needId = params.get("need");
-  const programmeParam = params.get("programme") as LaunchProgrammeTheme | null;
   const locationParam = params.get("location") || "";
   const checkIn = params.get("checkIn") || "";
   const checkOut = params.get("checkOut") || "";
 
-  const programmes = useMemo((): LaunchProgrammeTheme[] => {
-    const fromNeed = getProgrammesForNeedId(needId);
-    if (fromNeed.length > 0) return fromNeed;
-    if (programmeParam) return [programmeParam];
-    return [];
-  }, [needId, programmeParam]);
-
   const needLabel =
-    getNeedLabel(needId) ??
-    (programmeParam ? getHeroDiscoveryByProgramme(programmeParam)?.label : undefined);
+    needs.find((need) => need.slug === needId)?.label ??
+    (needId ? titleFromSlug(needId) : undefined);
 
   const needMatches = useMemo(
-    () => filterLaunchRetreats({ programmes }),
-    [programmes],
+    () =>
+      filterBrowseRetreats(
+        { needs: needId ? [needId] : [] },
+        inventory,
+        needThemeMap,
+      ),
+    [needId, inventory, needThemeMap],
   );
 
-  const locationGroups = useMemo(
-    () => getAvailableLocationGroups(null, programmes),
-    [programmes],
-  );
+  const locationGroups = useMemo(() => {
+    const regions = new Map<string, { region: string; regionLabel: string; localities: string[] }>();
+    for (const retreat of needMatches) {
+      const group = regions.get(retreat.region) ?? {
+        region: retreat.region,
+        regionLabel: retreat.stateLabel ?? retreat.region,
+        localities: [],
+      };
+      if (!group.localities.includes(retreat.locality)) group.localities.push(retreat.locality);
+      regions.set(retreat.region, group);
+    }
+    return [...regions.values()].map((group) => ({
+      region: group.region,
+      regionLabel: group.regionLabel,
+      options: group.localities.map((locality) => ({
+        locality,
+        count: needMatches.filter((retreat) => retreat.locality === locality).length,
+      })),
+    }));
+  }, [needMatches]);
 
-  const locationValid = isLocationValidForProgramme(null, locationParam, programmes);
+  const locationValid =
+    !locationParam ||
+    needMatches.some(
+      (retreat) =>
+        retreat.locality === locationParam ||
+        retreat.region === locationParam ||
+        retreat.stateLabel === locationParam,
+    );
   const location = locationValid ? locationParam : "";
 
   useEffect(() => {
@@ -58,13 +73,15 @@ export function SearchResults() {
 
   const results = useMemo(
     () =>
-      filterLaunchRetreats({
-        programmes,
-        location: location || null,
-        checkIn,
-        checkOut,
-      }),
-    [programmes, location, checkIn, checkOut],
+      filterBrowseRetreats(
+        {
+          needs: needId ? [needId] : [],
+          locations: location ? [location] : [],
+        },
+        inventory,
+        needThemeMap,
+      ),
+    [needId, location, inventory, needThemeMap],
   );
 
   const updateParams = (patch: Record<string, string | null>) => {
@@ -73,7 +90,7 @@ export function SearchResults() {
       if (!value) next.delete(key);
       else next.set(key, value);
     }
-    setParams(next, { replace: true });
+    setParams(next);
   };
 
   const clearNeedChip = () => {
@@ -85,16 +102,33 @@ export function SearchResults() {
     navigate(next.toString() ? `${base}?${next}` : base);
   };
 
-  const noInventoryForNeed = needMatches.length === 0 && programmes.length > 0;
+  if (source === "loading") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <p className="text-sage-600">Loading published retreats from the catalog…</p>
+      </div>
+    );
+  }
+
+  if (source === "error") {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800 mb-3">Catalog unavailable</h1>
+        <p className="text-sage-600">
+          Start Healingram.Gateway on port 5000 and Healingram.Api on port 5080, then refresh.
+        </p>
+      </div>
+    );
+  }
+
+  const noInventoryForNeed = needMatches.length === 0 && Boolean(needId);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <h1 className="font-display text-2xl md:text-3xl font-bold text-sage-800 mb-1">
         {needLabel ? `${needLabel} retreats` : "Explore retreats"}
       </h1>
-      <p className="text-sm text-gray-600 mb-5">
-        Curated from Healingram’s launch partners in Karnataka and Kerala.
-      </p>
+      <p className="text-sm text-gray-600 mb-5">Results from published catalog inventory.</p>
 
       {!noInventoryForNeed && (
         <ResultsFilterBar
@@ -131,9 +165,7 @@ export function SearchResults() {
           {results.length} {results.length === 1 ? "retreat" : "retreats"}
           {needLabel ? ` for ${needLabel}` : ""}
           {location ? ` in ${location}` : ""}
-          {checkIn || checkOut
-            ? ` · dates saved for availability request`
-            : ""}
+          {checkIn || checkOut ? ` · dates saved for availability request` : ""}
         </p>
       )}
 
@@ -144,7 +176,7 @@ export function SearchResults() {
           </h2>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
             <Link
-              to="/search"
+              to="/retreats"
               className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-500 text-center"
             >
               Explore all retreats

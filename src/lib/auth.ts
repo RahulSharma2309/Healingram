@@ -1,95 +1,99 @@
-const AUTH_KEY = "healingram_logged_in";
-const NAME_KEY = "healingram_user_name";
-const EMAIL_KEY = "healingram_user_email";
-const PHONE_KEY = "healingram_user_phone";
-const COUNTRY_KEY = "healingram_user_country";
+import { nationalPhone } from "./accountValidation";
+import { getAccessToken } from "./api/client";
+import type { AuthUser } from "./api/auth";
+import { getSessionUser, setSessionUser } from "./session";
 
 export type CustomerProfile = {
   name: string;
   email: string;
   phone: string;
   countryCode: string;
+  firstName: string;
+  lastName: string;
+  address: string;
+  role?: string;
+  accountStatus?: string;
 };
 
+export function homePathForRole(role?: string | null): string {
+  const normalized = (role ?? "").trim().toLowerCase();
+  if (normalized === "partner") return "/vendor";
+  if (normalized === "admin") return "/admin";
+  return "/dashboard";
+}
+
 export function isLoggedIn(): boolean {
-  try {
-    return localStorage.getItem(AUTH_KEY) === "1";
-  } catch {
-    return false;
-  }
+  if (!getAccessToken()) return false;
+  const user = getSessionUser();
+  if (!user) return Boolean(getAccessToken());
+  return user.accountStatus !== "guest" && user.authKind !== "guest_request";
+}
+
+export function hasRequestSession(): boolean {
+  return Boolean(getAccessToken());
+}
+
+export function isGuestAccountStatus(status?: string | null): boolean {
+  return (status ?? "registered") === "guest";
+}
+
+export function getUserRole(): string {
+  return (getSessionUser()?.role ?? "customer").toLowerCase();
 }
 
 export function getUserName(): string {
-  try {
-    return localStorage.getItem(NAME_KEY) || "Guest";
-  } catch {
-    return "Guest";
-  }
+  const user = getSessionUser();
+  return user?.fullName?.trim() || user?.email || "Guest";
 }
 
 export function getCustomerProfile(): CustomerProfile {
-  try {
+  const user = getSessionUser();
+  if (!user) {
     return {
-      name: localStorage.getItem(NAME_KEY) || "",
-      email: localStorage.getItem(EMAIL_KEY) || "",
-      phone: localStorage.getItem(PHONE_KEY) || "",
-      countryCode: localStorage.getItem(COUNTRY_KEY) || "+91",
+      name: "",
+      email: "",
+      phone: "",
+      countryCode: "+91",
+      firstName: "",
+      lastName: "",
+      address: "",
+      accountStatus: "registered",
     };
-  } catch {
-    return { name: "", email: "", phone: "", countryCode: "+91" };
   }
+  return {
+    name: user.fullName?.trim() || user.email,
+    email: user.email,
+    phone: nationalPhone(user.phone),
+    countryCode: user.phoneCountryCode || "+91",
+    firstName: user.firstName ?? "",
+    lastName: user.lastName ?? "",
+    address: user.address ?? "",
+    role: user.role,
+    accountStatus: user.accountStatus ?? "registered",
+  };
 }
 
-export function saveCustomerProfile(profile: Partial<CustomerProfile>): void {
-  try {
-    if (profile.name != null) localStorage.setItem(NAME_KEY, profile.name);
-    if (profile.email != null) localStorage.setItem(EMAIL_KEY, profile.email);
-    if (profile.phone != null) localStorage.setItem(PHONE_KEY, profile.phone);
-    if (profile.countryCode != null) localStorage.setItem(COUNTRY_KEY, profile.countryCode);
-    window.dispatchEvent(new Event("healingram-auth"));
-  } catch {
-    /* ignore */
-  }
+export function saveCustomerProfile(_profile: Partial<CustomerProfile>): void {
+  /* Profile writes go through PATCH /api/users/me. */
 }
 
-export function logIn(name = "Priya", extras?: Partial<CustomerProfile>): void {
-  try {
-    localStorage.setItem(AUTH_KEY, "1");
-    localStorage.setItem(NAME_KEY, name);
-    if (extras?.email) localStorage.setItem(EMAIL_KEY, extras.email);
-    else if (!localStorage.getItem(EMAIL_KEY)) {
-      localStorage.setItem(EMAIL_KEY, "priya@example.com");
-    }
-    if (extras?.phone) localStorage.setItem(PHONE_KEY, extras.phone);
-    else if (!localStorage.getItem(PHONE_KEY)) {
-      localStorage.setItem(PHONE_KEY, "9876543210");
-    }
-    if (extras?.countryCode) localStorage.setItem(COUNTRY_KEY, extras.countryCode);
-    else if (!localStorage.getItem(COUNTRY_KEY)) {
-      localStorage.setItem(COUNTRY_KEY, "+91");
-    }
-    window.dispatchEvent(new Event("healingram-auth"));
-  } catch {
-    /* ignore */
-  }
+export function applyAuthUser(user: AuthUser): void {
+  setSessionUser(user);
+}
+
+export function isRegisteredAccount(): boolean {
+  return isLoggedIn();
+}
+
+export function logIn(_name?: string, _extras?: Partial<CustomerProfile>): void {
+  /* Session is created by the server. Bootstrap via GET /api/users/me. */
 }
 
 export function logOut(): void {
-  try {
-    localStorage.removeItem(AUTH_KEY);
-    localStorage.removeItem(NAME_KEY);
-    window.dispatchEvent(new Event("healingram-auth"));
-  } catch {
-    /* ignore */
-  }
+  setSessionUser(null);
 }
 
+/** Server user id only. Never invent a customer key. */
 export function getCustomerId(): string | null {
-  if (!isLoggedIn()) return null;
-  try {
-    const email = localStorage.getItem(EMAIL_KEY) || getUserName();
-    return `cust_${email.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-  } catch {
-    return "cust_guest";
-  }
+  return getSessionUser()?.id ?? null;
 }

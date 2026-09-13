@@ -1,42 +1,46 @@
-# SereniTrip — Wellness Retreat Booking (Proposal MVP)
+# Healingram
 
-Interactive UX prototype for a **MakeMyTrip-style wellness retreat marketplace** — built for client proposals and demos.
+Programme-led retreat marketplace.
 
-## What's included
+- `src/` is the canonical React frontend (presentation only).
+- `backend/` is the canonical modular monolith.
+- PostgreSQL is the business source of truth.
+- `ui-reference` is deprecated and removed from this branch.
 
-### 1. Customer website (`/`)
-- Home with search, therapy categories, destinations
-- Retreat listing & search results with filters
-- Retreat detail + booking flow (checkout → payment → confirmation)
-- Wellness questionnaire (rule-based recommendations demo)
-- Login, signup, user dashboard
-- About, contact, FAQ, blog, therapies, destinations
+The site talks to the gateway. **Documentation:** [`docs/README.md`](docs/README.md).
 
-### 2. Vendor panel (`/vendor`)
-- Dashboard, retreats, availability/calendar sync, bookings, earnings
+## Run on this laptop
 
-### 3. Admin panel (`/admin`)
-- Vendors, retreats, bookings, commission, CMS/SEO, reports, recommendation rules
-
-> **Note:** This is a **front-end prototype only**. No real API, payments, or database.
-
-## Run locally
-
-```bash
+```powershell
+.\scripts\dev-deps.ps1
+dotnet run --project backend/src/Healingram.Api
+dotnet run --project backend/src/Healingram.Gateway
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+| What | URL |
+| --- | --- |
+| Website | http://localhost:5173 |
+| Gateway | http://localhost:5000 |
+| API | http://localhost:5080 |
+| Mailpit | http://localhost:8025 |
 
-## Tech stack
+`VITE_API_BASE_URL=http://localhost:5000`.  
+Demo login: `guest@local.test` / `partner@local.test` / `admin@local.test` — password `Local123!`.
 
-- React 19 + TypeScript
-- Vite
-- React Router
-- Tailwind CSS v4
-- Lucide icons
+If something else owns port 5000 (old Docker `infra-gateway-1`), stop it.
 
-## Proposal use
+## Tests
 
-Use this demo to walk through user flows during sales calls. Link from the top banner to switch between **Vendor** and **Admin** panels.
+```powershell
+dotnet test backend/Healingram.slnx
+npm test
+.\scripts\uat-flows.ps1
+```
+
+Product cases to click: `docs/test-cases/`.
+
+## Spec
+
+`Healingram_Developer_Functional_Specification_V1.docx` plus the human overrides in `docs/po-flows/00-what-healingram-is.md`.

@@ -1,35 +1,25 @@
 import { Link } from "react-router-dom";
-import { Heart, MapPin, BadgeCheck } from "lucide-react";
-import {
-  formatLaunchPrice,
-  getRetreatDisplayTags,
-  LAUNCH_DESTINATIONS,
-  type LaunchRetreat,
-} from "../data/launchSupply";
-import { getRetreatVerifiedFromPrice } from "../data/allRetreatsBrowse";
+import { MapPin, BadgeCheck } from "lucide-react";
+import { getRetreatDisplayTags, type LaunchRetreat } from "../lib/catalogTypes";
+import { formatLaunchPrice } from "../lib/money";
+import { WishlistButton } from "./WishlistButton";
 
 export function LaunchRetreatCard({ retreat }: { retreat: LaunchRetreat }) {
-  const regionLabel = LAUNCH_DESTINATIONS[retreat.region].regionLabel;
+  const regionLabel = retreat.stateLabel ?? retreat.region;
   const tags = getRetreatDisplayTags(retreat);
-  const verifiedFrom = getRetreatVerifiedFromPrice(retreat.id);
-  const priceLabel =
-    formatLaunchPrice(verifiedFrom) ?? formatLaunchPrice(retreat.priceFrom ?? null);
+  const priceLabel = formatLaunchPrice(retreat.priceFrom ?? null);
 
   return (
     <article className="bg-white rounded-2xl overflow-hidden border border-sand-200 hover:shadow-md transition-shadow group flex flex-col">
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <img
-          src={retreat.image}
-          alt={retreat.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-        <button
-          type="button"
-          className="absolute top-3 right-3 p-2 bg-white/95 rounded-full hover:bg-white shadow-sm"
-          aria-label="Add to wishlist"
-        >
-          <Heart className="w-4 h-4 text-sage-600" />
-        </button>
+      <div className="relative aspect-[4/3] overflow-hidden bg-sand-100">
+        {retreat.image ? (
+          <img
+            src={retreat.image}
+            alt={retreat.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : null}
+        <WishlistButton slug={retreat.id} />
         {retreat.mvpDemoVerified && (
           <span className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 bg-white/95 text-teal-700 text-[11px] font-semibold rounded-md shadow-sm">
             <BadgeCheck className="w-3.5 h-3.5" />

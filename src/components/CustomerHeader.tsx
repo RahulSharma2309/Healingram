@@ -7,6 +7,7 @@
  */
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { vendorPortalHref } from "../lib/runtimeConfig";
 import { ChevronDown, Heart, Menu, User, X } from "lucide-react";
 import {
   useCallback,
@@ -17,8 +18,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { getUserName, isLoggedIn, logOut } from "../lib/auth";
-import { getHeaderItem, type NavLinkItem } from "../navigation/headerConfig";
+import { useAuth } from "../lib/auth/AuthProvider";
+import { fetchThemes } from "../lib/api/catalog";
+import {
+  buildDestinationsMenuFromPlaces,
+  buildRetreatTypesMenu,
+  getHeaderItem,
+  type NavLinkItem,
+} from "../navigation/headerConfig";
+import { usePublishedRetreats } from "../lib/api/usePublishedRetreats";
 import healingramMark from "../assets/healingram-mark.png";
 
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -55,24 +63,12 @@ function groupNavItems(items: NavLinkItem[]): { group?: string; items: NavLinkIt
 }
 
 function useAuthState() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("Guest");
-
-  const refresh = useCallback(() => {
-    setLoggedIn(isLoggedIn());
-    setUserName(getUserName());
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    window.addEventListener("healingram-auth", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("healingram-auth", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [refresh]);
-
+  const { user, authenticated } = useAuth();
+  const loggedIn =
+    authenticated &&
+    user?.accountStatus !== "guest" &&
+    user?.authKind !== "guest_request";
+  const userName = user?.fullName?.trim() || user?.email || "Guest";
   return { loggedIn, userName };
 }
 
@@ -324,6 +320,7 @@ function AccountDropdown({
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const closeTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -345,7 +342,7 @@ function AccountDropdown({
   return (
     <div
       ref={rootRef}
-      className="relative"
+      className="relative inline-flex items-center gap-0.5"
       onMouseEnter={() => {
         if (closeTimer.current != null) window.clearTimeout(closeTimer.current);
         onOpen();
@@ -354,32 +351,47 @@ function AccountDropdown({
         closeTimer.current = window.setTimeout(() => onClose(), 160);
       }}
     >
-      <button
-        type="button"
+      <Link
+        to="/dashboard?tab=profile"
         className={`inline-flex items-center gap-2 text-sm font-medium ${
           open ? "text-teal-600" : "text-gray-600 hover:text-sage-800"
         }`}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-controls={id}
-        onClick={() => (open ? onClose() : onOpen())}
+        aria-label="Profile"
+        onClick={onClose}
       >
         <span className="w-8 h-8 rounded-full bg-teal-100 text-teal-700 inline-flex items-center justify-center">
           <User className="w-4 h-4" />
         </span>
         <span className="max-w-[7rem] truncate">{userName}</span>
+      </Link>
+      <button
+        type="button"
+        className={`inline-flex items-center ${open ? "text-teal-600" : "text-gray-600 hover:text-sage-800"}`}
+        aria-label="Account menu"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={id}
+        onClick={() => (open ? onClose() : onOpen())}
+      >
         <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div id={id} role="menu" className="absolute right-0 top-full pt-2 z-50">
           <div className="min-w-[220px] rounded-xl border border-sand-200 bg-white py-2 shadow-lg">
-            <p className="px-4 py-2 text-xs text-gray-400">Account menu — awaiting Tab 11 spec</p>
+            <Link
+              to="/dashboard?tab=profile"
+              role="menuitem"
+              className="block px-4 py-2.5 text-sm text-sage-800 hover:bg-sand-50"
+              onClick={onClose}
+            >
+              Profile
+            </Link>
             <button
               type="button"
               role="menuitem"
               className="w-full text-left px-4 py-2.5 text-sm text-sage-800 hover:bg-sand-50 border-t border-sand-100"
               onClick={() => {
-                logOut();
+                void logout();
                 onClose();
                 navigate("/");
               }}
@@ -397,9 +409,11 @@ type OpenMenu = "types" | "destinations" | "account" | null;
 
 export function CustomerHeader() {
   const { loggedIn, userName } = useAuthState();
+  const { logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [mobileSection, setMobileSection] = useState<OpenMenu>(null);
+  const [typeItems, setTypeItems] = useState<NavLinkItem[]>([]);
   const navigate = useNavigate();
 
   const item1 = getHeaderItem(1);
@@ -411,8 +425,22 @@ export function CustomerHeader() {
   const item8 = getHeaderItem(8);
   const item9 = getHeaderItem(9);
 
-  const typeItems = item3.getMenuItems?.() ?? [];
-  const destinationItems = item4.getMenuItems?.() ?? [];
+  const { places } = usePublishedRetreats();
+  const destinationItems = buildDestinationsMenuFromPlaces(places);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchThemes()
+      .then((themes) => {
+        if (!cancelled) setTypeItems(buildRetreatTypesMenu(themes));
+      })
+      .catch(() => {
+        if (!cancelled) setTypeItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const closeAll = useCallback(() => {
     setOpenMenu(null);
@@ -436,16 +464,26 @@ export function CustomerHeader() {
     closeAll();
   };
 
+  const myRequestTo = loggedIn ? "/dashboard?tab=requests" : "/my-request";
+  const myRequestLink = (
+    <Link to={myRequestTo} className="text-sm font-medium text-gray-600 hover:text-sage-800">
+      My Request
+    </Link>
+  );
+
   let desktopActions: ReactNode;
   if (loggedIn) {
     desktopActions = (
       <>
-        {/* Item 11 — shell until Tab 11 spec */}
-        <span className="text-sm font-medium text-gray-500 cursor-default" title="Awaiting Tab 11 spec">
-          My Trips
-        </span>
+        {myRequestLink}
         <Link
-          to="/dashboard"
+          to="/dashboard?tab=trips"
+          className="text-sm font-medium text-gray-600 hover:text-sage-800"
+        >
+          My Trips
+        </Link>
+        <Link
+          to="/dashboard?tab=wishlist"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-sage-800"
           data-header-item={item6.id}
         >
@@ -463,14 +501,7 @@ export function CustomerHeader() {
   } else {
     desktopActions = (
       <>
-        <Link
-          to="/dashboard"
-          className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-sage-800"
-          data-header-item={item6.id}
-        >
-          <Heart className="w-4 h-4" />
-          {item6.label}
-        </Link>
+        {myRequestLink}
         <Link
           to="/login"
           className="text-sm font-medium text-gray-600 hover:text-sage-800"
@@ -488,19 +519,19 @@ export function CustomerHeader() {
       <div className="hidden md:block bg-sage-800 text-white text-[11px] tracking-wide">
         <div className="max-w-7xl mx-auto px-4 h-8 flex items-center justify-between gap-4">
           <p className="opacity-90 truncate">
-            Verified wellness retreats
+            Programme-led wellness retreats
             <span className="mx-2 opacity-40">·</span>
             Transparent programme pricing
             <span className="mx-2 opacity-40">·</span>
             Expert help before you book
           </p>
-          <Link
-            to="/vendor"
+          <a
+            href={vendorPortalHref()}
             className="shrink-0 font-medium opacity-90 hover:opacity-100 hover:text-teal-200"
             data-header-item={item9.id}
           >
             {item9.label}
-          </Link>
+          </a>
         </div>
       </div>
 
@@ -583,15 +614,25 @@ export function CustomerHeader() {
         </div>
 
         <div className="flex lg:hidden items-center gap-1 ml-auto">
-          <Link
-            to="/dashboard"
-            className="p-2 rounded-lg hover:bg-sand-100"
-            aria-label={item6.label}
-            onClick={closeMobile}
-            data-header-item={item6.id}
-          >
-            <Heart className="w-5 h-5 text-sage-700" />
-          </Link>
+          {loggedIn ? (
+            <Link
+              to="/dashboard?tab=wishlist"
+              className="p-2 rounded-lg hover:bg-sand-100"
+              aria-label={item6.label}
+              onClick={closeMobile}
+              data-header-item={item6.id}
+            >
+              <Heart className="w-5 h-5 text-sage-700" />
+            </Link>
+          ) : (
+            <Link
+              to={myRequestTo}
+              className="px-2 py-1 text-sm font-medium text-sage-800"
+              onClick={closeMobile}
+            >
+              My Request
+            </Link>
+          )}
           <Link
             to="/contact"
             className="inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 bg-teal-600 text-white rounded-lg hover:bg-teal-500"
@@ -640,25 +681,52 @@ export function CustomerHeader() {
             mobile
           />
           <Link
-            to="/dashboard"
+            to={myRequestTo}
             onClick={closeMobile}
             className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
-            data-header-item={item6.id}
           >
-            {item6.label}
+            My Request
           </Link>
           {loggedIn ? (
-            <button
-              type="button"
-              className="w-full text-left py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
-              onClick={() => {
-                logOut();
-                closeMobile();
-                navigate("/");
-              }}
+            <Link
+              to="/dashboard?tab=trips"
+              onClick={closeMobile}
+              className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
             >
-              Log out
-            </button>
+              My Trips
+            </Link>
+          ) : null}
+          {loggedIn ? (
+            <Link
+              to="/dashboard?tab=wishlist"
+              onClick={closeMobile}
+              className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+              data-header-item={item6.id}
+            >
+              {item6.label}
+            </Link>
+          ) : null}
+          {loggedIn ? (
+            <>
+              <Link
+                to="/dashboard?tab=profile"
+                onClick={closeMobile}
+                className="block py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+              >
+                Profile
+              </Link>
+              <button
+                type="button"
+                className="w-full text-left py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
+                onClick={() => {
+                  void logout();
+                  closeMobile();
+                  navigate("/");
+                }}
+              >
+                Log out
+              </button>
+            </>
           ) : (
             <Link
               to="/login"
@@ -678,14 +746,14 @@ export function CustomerHeader() {
             <WhatsAppIcon className="w-4 h-4" />
             {item8.label}
           </Link>
-          <Link
-            to="/vendor"
+          <a
+            href={vendorPortalHref()}
             onClick={closeMobile}
             className="block text-center text-xs text-gray-500 pb-3 hover:text-teal-700"
             data-header-item={item9.id}
           >
             {item9.label}
-          </Link>
+          </a>
         </nav>
       )}
     </header>
