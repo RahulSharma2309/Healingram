@@ -70,19 +70,44 @@ internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
         => Task.FromResult(Bookings.FirstOrDefault(b =>
             string.Equals(b.PublicId, publicId, StringComparison.Ordinal)));
 
-    public Task<BookingRef> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
+    public int FailNextMarkPaid { get; set; }
+
+    public Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
     {
         MarkPaidCalls.Add(bookingId);
-        var index = Bookings.FindIndex(b => b.BookingId == bookingId);
-        if (index >= 0)
+        if (FailNextMarkPaid > 0)
         {
-            var current = Bookings[index];
-            Bookings[index] = current with { Status = BookingStatuses.Paid };
-            current = Bookings[index];
-            return Task.FromResult(new BookingRef(current.BookingId, current.BookingNumber, current.Status));
+            FailNextMarkPaid--;
+            throw new InvalidOperationException("simulated booking mark-paid failure");
         }
 
-        return Task.FromResult(new BookingRef(bookingId, "BK-unknown", BookingStatuses.Paid));
+        var index = Bookings.FindIndex(b => b.BookingId == bookingId);
+        if (index < 0)
+        {
+            return Task.FromResult(new MarkPaidResult(MarkPaidKind.NotFound, Error: "Booking not found"));
+        }
+
+        var current = Bookings[index];
+        if (string.Equals(current.Status, BookingStatuses.Paid, StringComparison.Ordinal))
+        {
+            return Task.FromResult(new MarkPaidResult(
+                MarkPaidKind.AlreadyPaid,
+                new BookingRef(current.BookingId, current.BookingNumber, current.Status)));
+        }
+
+        if (!string.Equals(current.Status, BookingStatuses.AwaitingPayment, StringComparison.Ordinal))
+        {
+            return Task.FromResult(new MarkPaidResult(
+                MarkPaidKind.InvalidTransition,
+                new BookingRef(current.BookingId, current.BookingNumber, current.Status),
+                $"Cannot mark booking paid from {current.Status}"));
+        }
+
+        Bookings[index] = current with { Status = BookingStatuses.Paid };
+        current = Bookings[index];
+        return Task.FromResult(new MarkPaidResult(
+            MarkPaidKind.Paid,
+            new BookingRef(current.BookingId, current.BookingNumber, current.Status)));
     }
 }
 

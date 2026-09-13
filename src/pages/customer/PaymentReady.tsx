@@ -5,7 +5,6 @@ import { ApiError } from "../../lib/api/client";
 import { getAvailabilityByPublicId } from "../../lib/api/availability";
 import { isRegisteredAccount } from "../../lib/auth";
 import {
-  applyPaymentWebhook,
   getAvailabilityRequest,
   mergeServerAvailability,
   type AvailabilityRequest,
@@ -62,16 +61,8 @@ export function PaymentReady() {
         const intent = await refreshIntentStatus(intentId);
         if (cancelled || !requestId) return;
         if (intent.status === "paid") {
-          const current = getAvailabilityRequest(requestId);
-          if (current && current.status === "PAYMENT_PENDING" && current.finalPayableAmount != null) {
-            applyPaymentWebhook(requestId, {
-              providerPaymentId: intent.id,
-              amount: current.finalPayableAmount,
-              verified: true,
-            });
-          }
-          const latest = getAvailabilityRequest(requestId);
-          if (latest) setRequest(latest);
+          const dto = await getAvailabilityByPublicId(requestId);
+          setRequest(mergeServerAvailability(dto));
         }
       } catch {
         /* GET is read-only; ignore if API is down */

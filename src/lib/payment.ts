@@ -7,11 +7,11 @@
 import type { SettlementMode } from "../data/programmePricing";
 import {
   getPaymentIntentById,
-  postFakePaymentWebhook,
+  postAdminSimulatePayment,
   postPaymentIntent,
   type ServerPaymentIntent,
 } from "./api/payment";
-import { applyPaymentWebhook, getAvailabilityRequest } from "./availabilityRequests";
+import { getAvailabilityRequest } from "./availabilityRequests";
 
 export type PaymentIntent = {
   requestId: string;
@@ -170,7 +170,7 @@ export async function simulateVerifiedPaymentWebhook(requestId: string): Promise
       rememberIntentId(requestId, created.id);
     }
 
-    const paid = await postFakePaymentWebhook(
+    const paid = await postAdminSimulatePayment(
       intentId,
       `demo_wh_${crypto.randomUUID()}`,
       request.finalPayableAmount,
@@ -178,12 +178,6 @@ export async function simulateVerifiedPaymentWebhook(requestId: string): Promise
     if (paid.status !== "paid" && paid.status !== "succeeded") {
       return { ok: false, message: "Server did not mark this intent paid." };
     }
-
-    applyPaymentWebhook(requestId, {
-      providerPaymentId: paid.id,
-      amount: request.finalPayableAmount,
-      verified: true,
-    });
 
     return {
       ok: true,

@@ -82,6 +82,9 @@ public static class RoleAuthorization
     public static string? GetScopedRequestId(ClaimsPrincipal? user)
         => user?.FindFirstValue("request_id");
 
+    public static string? GetAuthKind(ClaimsPrincipal? user)
+        => user?.FindFirstValue(AuthKinds.Claim);
+
     private static bool IsRole(string? actual, string expected)
         => !string.IsNullOrWhiteSpace(actual)
            && actual.Equals(expected, StringComparison.OrdinalIgnoreCase);

@@ -1,3 +1,4 @@
+using Healingram.Contracts.Payment;
 using Microsoft.Extensions.Configuration;
 
 namespace Healingram.Modules.Payment.Application;
@@ -6,12 +7,6 @@ internal static class PaymentStatuses
 {
     public const string Ready = "ready";
     public const string Paid = "paid";
-}
-
-internal static class PaymentProviders
-{
-    public const string Local = "local";
-    public const string Fake = "local";
 }
 
 internal static class PaymentWebhookHeaders

@@ -46,16 +46,36 @@ internal sealed class FakePartnerAccess : IPartnerAccess
         var slugs = await ListRetreatSlugsForUserAsync(userId, cancellationToken);
         return slugs.Any(slug => slug.Equals(retreatSlug, StringComparison.OrdinalIgnoreCase));
     }
+
+    public Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var slugs = _byUser.TryGetValue(userId, out var mapped) ? mapped : DefaultSlugs;
+        if (slugs.Count == 0)
+        {
+            return Task.FromResult<IReadOnlyList<PartnerMembership>>([]);
+        }
+
+        return Task.FromResult<IReadOnlyList<PartnerMembership>>(
+        [
+            new PartnerMembership(userId, "Test Partner", "manager", "active")
+        ]);
+    }
 }
 
 internal sealed class FakeGuestIdentityPort(Guid customerId) : IGuestIdentityPort
 {
-    public Task<Guid> EnsureCustomerAsync(
+    public bool RequiresSignIn { get; set; }
+
+    public Task<GuestIdentityResult> EnsureCustomerAsync(
         string email,
         string phoneE164,
         string displayName,
         CancellationToken cancellationToken)
-        => Task.FromResult(customerId);
+        => Task.FromResult(RequiresSignIn
+            ? new GuestIdentityResult(null, true)
+            : new GuestIdentityResult(customerId, false));
 }
 
 internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
@@ -73,7 +93,7 @@ internal sealed class FakeBookingPaymentPort : IBookingPaymentPort
             new BookingPaymentGate(Guid.NewGuid(), "BK-PAID", BookingStatuses.Paid, null, publicId));
     }
 
-    public Task<BookingRef> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
+    public Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
         => throw new NotSupportedException();
 }
 
@@ -84,6 +104,7 @@ internal sealed class AvailabilityFixture
     public required RecordingBookingCommands Bookings { get; init; }
     public required FakePartnerAccess Partners { get; init; }
     public required FakeBookingPaymentPort Payments { get; init; }
+    public required FakeGuestIdentityPort Guests { get; init; }
 
     public void Deconstruct(
         out AvailabilityService service,
@@ -111,13 +132,14 @@ internal static class AvailabilityHarness
         var partners = new FakePartnerAccess();
         partners.Map(Partner.UserId!.Value, slugs);
         var payments = new FakeBookingPaymentPort();
+        var guests = new FakeGuestIdentityPort(guestCustomerId);
         var service = new AvailabilityService(
             store,
             new FakeCatalogReadPort(slugs),
             bookings,
             payments,
             partners,
-            new FakeGuestIdentityPort(guestCustomerId),
+            guests,
             TimeProvider.System,
             NullLogger<AvailabilityService>.Instance);
         return new AvailabilityFixture
@@ -126,7 +148,8 @@ internal static class AvailabilityHarness
             Store = store,
             Bookings = bookings,
             Partners = partners,
-            Payments = payments
+            Payments = payments,
+            Guests = guests
         };
     }
 

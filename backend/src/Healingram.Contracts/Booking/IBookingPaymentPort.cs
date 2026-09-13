@@ -8,7 +8,20 @@ public interface IBookingPaymentPort
 {
     Task<BookingPaymentGate?> FindByPublicIdAsync(string publicId, CancellationToken cancellationToken);
 
-    Task<BookingRef> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken);
+    Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken);
+}
+
+public enum MarkPaidKind
+{
+    Paid,
+    AlreadyPaid,
+    InvalidTransition,
+    NotFound
+}
+
+public sealed record MarkPaidResult(MarkPaidKind Kind, BookingRef? Booking = null, string? Error = null)
+{
+    public bool Applied => Kind is MarkPaidKind.Paid or MarkPaidKind.AlreadyPaid;
 }
 
 public sealed record BookingPaymentGate(

@@ -8,7 +8,7 @@ internal sealed class LocalPaymentProvider(PaymentSettings settings) : IPaymentP
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public string Name => settings.ProviderName;
+    public string Name => PaymentProviders.Local;
 
     public Task<ProviderPaymentRef> CreatePaymentAsync(
         CreateProviderPayment request,

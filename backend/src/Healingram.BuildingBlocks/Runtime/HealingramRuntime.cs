@@ -24,12 +24,16 @@ public sealed class HealingramRuntime
         var vendor = configuration["App:VendorUrl"] ?? "http://localhost:5173";
         var admin = configuration["App:AdminUrl"] ?? "http://localhost:5173";
         var extra = configuration.GetSection("App:AdditionalCorsOrigins").Get<string[]>() ?? [];
-        var origins = extra
-            .Concat([customer, vendor, admin, "http://localhost:5173", "http://127.0.0.1:5173"])
+        var configured = extra
+            .Concat([customer, vendor, admin])
             .Where(static o => !string.IsNullOrWhiteSpace(o))
-            .Select(static o => o.Trim().TrimEnd('/'))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+            .Select(static o => o.Trim().TrimEnd('/'));
+        var origins = environment.IsProduction()
+            ? configured.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : configured
+                .Concat(["http://localhost:5173", "http://127.0.0.1:5173"])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         return new HealingramRuntime
         {
@@ -76,18 +80,28 @@ public sealed class HealingramRuntime
                 failures.Add("Payment webhook secret must be set to a non-default value");
             }
 
-            var otp = configuration["Otp:Provider"] ?? "local";
-            var payment = configuration["Payment:Provider"] ?? "local";
-            if (string.Equals(otp, "local", StringComparison.OrdinalIgnoreCase)
+            var otp = (configuration["Otp:Provider"] ?? "local").Trim().ToLowerInvariant();
+            var payment = (configuration["Payment:Provider"] ?? "local").Trim().ToLowerInvariant();
+            if (otp is "local"
                 && !configuration.GetValue("Otp:AllowLocalInProduction", false))
             {
                 failures.Add("Otp:Provider cannot be local in Production");
             }
 
-            if (string.Equals(payment, "local", StringComparison.OrdinalIgnoreCase)
+            if (payment is "local" or "fake"
                 && !configuration.GetValue("Payment:AllowLocalInProduction", false))
             {
                 failures.Add("Payment:Provider cannot be local in Production");
+            }
+
+            if (otp is not "local")
+            {
+                failures.Add($"Otp:Provider '{otp}' is not implemented in this build");
+            }
+
+            if (payment is not ("local" or "fake"))
+            {
+                failures.Add($"Payment:Provider '{payment}' is not implemented in this build");
             }
         }
 

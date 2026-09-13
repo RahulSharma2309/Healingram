@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Partners;
 using Healingram.Modules.Identity.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,8 @@ public class PartnerWritePolicyTests
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IPartnerAccess, AllowAllPartnerAccess>();
+        services.AddSingleton<IAdminAuthorization, AllowAllAdminAuthorization>();
         IdentityAuthorization.AddPolicies(services);
         await using var provider = services.BuildServiceProvider();
         var authorization = provider.GetRequiredService<IAuthorizationService>();
@@ -51,4 +54,23 @@ public class PartnerWritePolicyTests
                 new Claim("role", role)
             ],
             authenticationType: "test"));
+
+    private sealed class AllowAllAdminAuthorization : IAdminAuthorization
+    {
+        public Task<bool> HasPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken)
+            => Task.FromResult(true);
+    }
+
+    private sealed class AllowAllPartnerAccess : IPartnerAccess
+    {
+        public Task<IReadOnlyList<string>> ListRetreatSlugsForUserAsync(Guid userId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<string>>(["published-retreat"]);
+
+        public Task<bool> CanAccessRetreatAsync(Guid userId, string retreatSlug, CancellationToken cancellationToken)
+            => Task.FromResult(true);
+
+        public Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(Guid userId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<PartnerMembership>>(
+                [new PartnerMembership(Guid.NewGuid(), "Local Partner", "manager", "active")]);
+    }
 }

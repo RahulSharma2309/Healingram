@@ -53,7 +53,7 @@ public class TripAndPartnerQueueTests
                 CancellationToken.None);
         }
 
-        var trips = await fixture.Service.ListTripsAsync(user.UserId!.Value, CancellationToken.None);
+        var trips = await fixture.Service.ListTripsAsync(user, CancellationToken.None);
 
         Assert.Single(trips.PaymentPending);
         Assert.Equal(confirmed.Entity.PublicId, trips.PaymentPending[0].PublicId);
@@ -101,8 +101,8 @@ public class TripAndPartnerQueueTests
             AvailabilityHarness.Partner,
             CancellationToken.None);
 
-        var tripsA = await fixture.Service.ListTripsAsync(userA.UserId!.Value, CancellationToken.None);
-        var tripsB = await fixture.Service.ListTripsAsync(userB.UserId!.Value, CancellationToken.None);
+        var tripsA = await fixture.Service.ListTripsAsync(userA, CancellationToken.None);
+        var tripsB = await fixture.Service.ListTripsAsync(userB, CancellationToken.None);
         var storedA = await fixture.Store.ListByCustomerUserIdAsync(userA.UserId!.Value, CancellationToken.None);
 
         Assert.Single(tripsA.PaymentPending);
@@ -132,7 +132,7 @@ public class TripAndPartnerQueueTests
             CancellationToken.None);
         fixture.Payments.PaidPublicIds.Add(created.Entity.PublicId);
 
-        var trips = await fixture.Service.ListTripsAsync(user.UserId!.Value, CancellationToken.None);
+        var trips = await fixture.Service.ListTripsAsync(user, CancellationToken.None);
 
         Assert.Empty(trips.PaymentPending);
         Assert.Single(trips.Upcoming);

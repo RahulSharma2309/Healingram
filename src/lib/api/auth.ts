@@ -1,7 +1,12 @@
 import { mergeWishlistOnLogin } from "../wishlist";
-import { ApiError, apiFetch, setAccessToken } from "./client";
+import { ApiError, apiFetch, getRefreshToken, setAccessToken, setRefreshToken } from "./client";
 
-const REFRESH_KEY = "healingram_refresh_token";
+export type PartnerMembership = {
+  partnerId: string;
+  partnerName: string;
+  role: string;
+  status: string;
+};
 
 export type AuthUser = {
   id: string;
@@ -15,6 +20,7 @@ export type AuthUser = {
   address?: string | null;
   phoneCountryCode?: string | null;
   accountStatus?: string | null;
+  partnerMemberships?: PartnerMembership[];
 };
 
 export function userHasRole(user: Pick<AuthUser, "role" | "roles">, role: string): boolean {
@@ -23,46 +29,44 @@ export function userHasRole(user: Pick<AuthUser, "role" | "roles">, role: string
   return (user.roles ?? []).some((item) => item.toLowerCase() === wanted);
 }
 
+export function userHasActivePartnerMembership(user: Pick<AuthUser, "partnerMemberships">): boolean {
+  return (user.partnerMemberships ?? []).some((item) => item.status.toLowerCase() === "active");
+}
+
 export type TokenResponse = {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
 };
 
-function getRefreshToken(): string | null {
-  try {
-    return sessionStorage.getItem(REFRESH_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function persistSession(tokens: TokenResponse): void {
+export function persistSession(tokens: TokenResponse): void {
   setAccessToken(tokens.accessToken);
-  try {
-    sessionStorage.setItem(REFRESH_KEY, tokens.refreshToken);
-  } catch {
-    /* ignore */
-  }
+  setRefreshToken(tokens.refreshToken);
 }
 
 export function clearSession(): void {
   setAccessToken(null);
-  try {
-    sessionStorage.removeItem(REFRESH_KEY);
-  } catch {
-    /* ignore */
-  }
+  setRefreshToken(null);
 }
 
-export async function loginWithPassword(email: string, password: string): Promise<TokenResponse> {
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  persist = true,
+): Promise<TokenResponse> {
   const tokens = await apiFetch<TokenResponse>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
+  if (persist) {
+    await persistAuthenticatedSession(tokens);
+  }
+  return tokens;
+}
+
+export async function persistAuthenticatedSession(tokens: TokenResponse): Promise<void> {
   persistSession(tokens);
   await mergeWishlistOnLogin();
-  return tokens;
 }
 
 export async function registerAccount(input: {

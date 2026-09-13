@@ -87,14 +87,67 @@ internal sealed class PostgresOtpChallengeStore(IConfiguration configuration) : 
         await using var command = new NpgsqlCommand(
             """
             UPDATE identity.otp_challenges
-            SET attempts = @attempts, consumed_at = @consumedAt
+            SET attempts = @attempts, consumed_at = @consumedAt, provider_reference = @providerReference
             WHERE id = @id
             """,
             connection);
         command.Parameters.AddWithValue("attempts", challenge.Attempts);
         command.Parameters.AddWithValue("consumedAt", (object?)challenge.ConsumedAt ?? DBNull.Value);
+        command.Parameters.AddWithValue("providerReference", (object?)challenge.ProviderReference ?? DBNull.Value);
         command.Parameters.AddWithValue("id", challenge.Id);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task SetProviderReferenceAsync(Guid id, string? providerReference, CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE identity.otp_challenges
+            SET provider_reference = @providerReference
+            WHERE id = @id
+            """,
+            connection);
+        command.Parameters.AddWithValue("providerReference", (object?)providerReference ?? DBNull.Value);
+        command.Parameters.AddWithValue("id", id);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<bool> TryIncrementAttemptsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE identity.otp_challenges
+            SET attempts = attempts + 1
+            WHERE id = @id
+              AND consumed_at IS NULL
+              AND attempts < max_attempts
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", id);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> TryConsumeAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var connection = Open();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE identity.otp_challenges
+            SET consumed_at = @now
+            WHERE id = @id
+              AND consumed_at IS NULL
+              AND attempts < max_attempts
+              AND expires_at > @now
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("now", now);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
     private NpgsqlConnection Open()

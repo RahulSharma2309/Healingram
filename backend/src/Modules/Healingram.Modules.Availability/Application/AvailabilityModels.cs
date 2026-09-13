@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Otp;
 
 namespace Healingram.Modules.Availability.Application;
 
@@ -28,13 +29,18 @@ internal sealed record Actor(
     Guid? UserId,
     string? Purpose = null,
     string? ScopedRequestId = null,
-    IReadOnlyList<string>? Roles = null)
+    IReadOnlyList<string>? Roles = null,
+    string? AuthKind = null)
 {
     public IReadOnlyList<string> EffectiveRoles
         => Roles is { Count: > 0 } listed ? listed : [Role];
 
     public bool IsPartnerWrite => RoleAuthorization.SatisfiesPartnerWrite(EffectiveRoles);
     public bool IsAdminWrite => RoleAuthorization.SatisfiesAdminWrite(EffectiveRoles);
+
+    public bool IsGuestRequest
+        => string.Equals(AuthKind, AuthKinds.GuestRequest, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(Purpose, OtpPurposes.RequestAccess, StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed class AvailabilityRequestEntity

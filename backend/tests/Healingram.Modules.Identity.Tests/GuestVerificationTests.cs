@@ -1,6 +1,6 @@
 using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Auth;
-using Microsoft.Extensions.Logging.Abstractions;
+using Healingram.Modules.Identity.Data;
 using Xunit;
 
 namespace Healingram.Modules.Identity.Tests;
@@ -92,11 +92,12 @@ public class GuestVerificationTests
     public async Task Register_promotes_the_same_guest_instead_of_a_second_user()
     {
         var store = new InMemoryIdentityStore();
-        var guestId = await new GuestIdentityAdapter(store).EnsureCustomerAsync(
+        var guest = await new GuestIdentityAdapter(store).EnsureCustomerAsync(
             "rahul@local.test",
             "+919876543210",
             "Rahul Sharma",
             CancellationToken.None);
+        var guestId = guest.UserId;
         var service = CreateService(store);
 
         var registered = await service.RegisterAsync(
@@ -114,6 +115,25 @@ public class GuestVerificationTests
         Assert.Equal(AuthStatus.Created, registered.Status);
         Assert.Equal(guestId, registered.Tokens?.User.Id);
         Assert.Equal(AccountStatuses.Registered, registered.Tokens?.User.AccountStatus);
+    }
+
+    [Fact]
+    public async Task Registered_contact_is_not_attached_as_guest()
+    {
+        var store = new InMemoryIdentityStore();
+        await store.CreateUserAsync(
+            new IdentityUser(Guid.NewGuid(), "rahul@local.test", "Rahul", Roles.Customer, "active"),
+            new AspNetIdentityPasswordHasher().Hash("Local123!"),
+            CancellationToken.None);
+
+        var result = await new GuestIdentityAdapter(store).EnsureCustomerAsync(
+            "rahul@local.test",
+            "9876543210",
+            "Someone Else",
+            CancellationToken.None);
+
+        Assert.True(result.RequiresSignIn);
+        Assert.Null(result.UserId);
     }
 
     private static AuthService CreateService(InMemoryIdentityStore store) => AuthTestKit.Create(store);

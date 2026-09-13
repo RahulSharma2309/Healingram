@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Healingram.Contracts.Payment;
 using Healingram.Modules.Payment;
 using Healingram.Modules.Payment.Application;
 using Healingram.Modules.Payment.Tests.Fakes;

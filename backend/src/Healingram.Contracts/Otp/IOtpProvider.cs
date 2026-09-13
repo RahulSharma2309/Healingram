@@ -52,6 +52,19 @@ public sealed record OtpVerifyCommand(
 
 public sealed record OtpVerifyResult(bool Ok, string? Error, Guid? UserId, string? PublicId);
 
+public static class OtpProviders
+{
+    public const string Local = "local";
+    public const string Twilio = "twilio";
+    public const string Msg91 = "msg91";
+
+    public static string Normalize(string? configured)
+        => string.IsNullOrWhiteSpace(configured) ? Local : configured.Trim().ToLowerInvariant();
+
+    public static bool IsImplemented(string? configured)
+        => Normalize(configured) == Local;
+}
+
 public interface IOtpService
 {
     Task<OtpStartResult> StartAsync(OtpStartCommand command, CancellationToken cancellationToken);

@@ -85,9 +85,20 @@ internal static class AvailabilityEndpoints
                     statusCode: StatusCodes.Status401Unauthorized);
             }
 
-            var items = await service.ListMineAsync(actor.UserId.Value, cancellationToken);
+            var items = await service.ListMineAsync(actor, cancellationToken);
             return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: false)) }, Json);
         }).RequireAuthorization().WithTags("Availability");
+
+        app.MapGet("/api/guest/requests/{publicId}", (
+            string publicId,
+            AvailabilityService service,
+            ClaimsPrincipal user,
+            CancellationToken cancellationToken)
+            => Handle(
+                service.GetAsync(publicId, ActorOf(user), includeInternalNotes: false, cancellationToken),
+                includeNotes: false))
+            .RequireAuthorization()
+            .WithTags("Availability");
 
         app.MapGet("/api/trips", async (
             AvailabilityService service,
@@ -100,7 +111,7 @@ internal static class AvailabilityEndpoints
                 return Results.Json(TripGroupsDto.Empty, Json);
             }
 
-            var groups = await service.ListTripsAsync(actor.UserId.Value, cancellationToken);
+            var groups = await service.ListTripsAsync(actor, cancellationToken);
             return Results.Json(groups, Json);
         }).RequireAuthorization().WithTags("Account");
 
@@ -119,7 +130,7 @@ internal static class AvailabilityEndpoints
         {
             var items = await service.ListAdminPendingAsync(cancellationToken);
             return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: true)) }, Json);
-        }).RequireAuthorization(IdentityPolicies.AdminWrite).WithTags("Admin");
+        }).RequireAuthorization(IdentityPolicies.AdminRequestsRead).WithTags("Admin");
 
         app.MapPost("/api/admin/availability/{publicId}/note", (
             string publicId,
@@ -128,7 +139,7 @@ internal static class AvailabilityEndpoints
             ClaimsPrincipal user,
             CancellationToken cancellationToken)
             => Handle(service.AddAdminNoteAsync(publicId, body, ActorOf(user), cancellationToken), includeNotes: true))
-            .RequireAuthorization(IdentityPolicies.AdminWrite)
+            .RequireAuthorization(IdentityPolicies.AdminRequestsManage)
             .WithTags("Admin");
     }
 
@@ -218,6 +229,7 @@ internal static class AvailabilityEndpoints
             userId,
             RoleAuthorization.GetPurpose(user),
             RoleAuthorization.GetScopedRequestId(user),
-            roles);
+            roles,
+            RoleAuthorization.GetAuthKind(user));
     }
 }

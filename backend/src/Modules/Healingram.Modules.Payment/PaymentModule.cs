@@ -23,7 +23,7 @@ public sealed class PaymentModule : IAppModule
     {
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(PaymentSettings.From(configuration));
-        services.AddSingleton<IPaymentProvider, LocalPaymentProvider>();
+        services.AddSingleton(sp => PaymentProviderFactory.Create(sp.GetRequiredService<PaymentSettings>()));
         services.AddScoped<IPaymentStore, PostgresPaymentStore>();
         services.AddScoped<PaymentService>();
     }

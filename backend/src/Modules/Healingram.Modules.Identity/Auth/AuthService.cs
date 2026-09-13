@@ -2,6 +2,7 @@ using Healingram.Contracts.Audit;
 using Healingram.Contracts.Availability;
 using Healingram.Contracts.Identity;
 using Healingram.Contracts.Otp;
+using Healingram.Contracts.Partners;
 using Healingram.Modules.Identity.Auth.Otp;
 using Healingram.Modules.Identity.Data;
 using Microsoft.Extensions.Logging;
@@ -50,7 +51,10 @@ internal sealed record AuthUserResponse(
     string? Address = null,
     string? PhoneCountryCode = null,
     string? AccountStatus = null,
-    IReadOnlyList<string>? Roles = null);
+    IReadOnlyList<string>? Roles = null,
+    IReadOnlyList<PartnerMembershipDto>? PartnerMemberships = null);
+
+internal sealed record PartnerMembershipDto(Guid PartnerId, string PartnerName, string Role, string Status);
 internal sealed record TokenResponse(string AccessToken, string RefreshToken, AuthUserResponse User);
 
 internal enum AuthStatus
@@ -96,7 +100,8 @@ internal sealed class AuthService(
     OtpSettings otpSettings,
     ILogger<AuthService> logger,
     IRequestAccessLookup? requestAccess = null,
-    IAuditPort? audit = null)
+    IAuditPort? audit = null,
+    IPartnerAccess? partners = null)
 {
     public async Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -268,7 +273,7 @@ internal sealed class AuthService(
         return AuthResult.Ok(await IssueTokensAsync(
             guestView,
             cancellationToken,
-            new AccessTokenIssue(OtpPurposes.RequestAccess, scopedRequest, [Roles.Customer])));
+            new AccessTokenIssue(OtpPurposes.RequestAccess, scopedRequest, [Roles.Customer], AuthKinds.GuestRequest)));
     }
 
     public async Task<AuthResult> UpdateProfileAsync(
@@ -432,8 +437,8 @@ internal sealed class AuthService(
         var refresh = tokens.CreateRefreshToken();
         await store.StoreRefreshTokenAsync(Guid.NewGuid(), user.Id, refresh.Hash, refresh.ExpiresAt, cancellationToken);
         var issued = issue is null
-            ? new AccessTokenIssue(Roles: roles)
-            : issue with { Roles = roles };
+            ? new AccessTokenIssue(Roles: roles, AuthKind: AuthKinds.Registered)
+            : issue with { Roles = roles, AuthKind = issue.AuthKind ?? AuthKinds.Registered };
         return new TokenResponse(
             tokens.CreateAccessToken(user, issued),
             refresh.Token,
@@ -502,6 +507,14 @@ internal sealed class AuthService(
         var resolved = roles is { Count: > 0 }
             ? RoleAuthorization.NormalizeRoles(roles)
             : RoleAuthorization.NormalizeRoles(await store.ListRolesAsync(user.Id, cancellationToken), user.Role);
+        IReadOnlyList<PartnerMembershipDto> memberships = [];
+        if (partners is not null)
+        {
+            memberships = (await partners.ListMembershipsForUserAsync(user.Id, cancellationToken))
+                .Select(item => new PartnerMembershipDto(item.PartnerId, item.PartnerName, item.MembershipRole, item.Status))
+                .ToArray();
+        }
+
         return new(
             user.Id,
             user.Email,
@@ -513,7 +526,8 @@ internal sealed class AuthService(
             user.Address,
             user.PhoneE164 is null ? null : ProfileRules.IndiaCountryCode,
             user.AccountStatus,
-            resolved);
+            resolved,
+            memberships);
     }
 
     private static List<string> ValidateCredentials(string? email, string? password, bool requireNewPassword, out string normalizedEmail)

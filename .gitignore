@@ -25,6 +25,7 @@ dist-ssr
 # .NET
 backend/**/bin/
 backend/**/obj/
+artifacts/
 *.user
 *.userosscache
 

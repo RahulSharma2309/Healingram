@@ -12,7 +12,9 @@
 
 Frontend: `src/lib/api/auth.ts`, `src/lib/auth.ts`.  
 Access token: `sessionStorage` key `healingram_access_token`.  
-Role after login: `homePathForRole` → `/dashboard` · `/vendor` · `/admin`.
+`apiFetch` refreshes once on 401.
+
+Portals are separate apps/hosts when `VITE_CUSTOMER_APP_URL` / `VITE_VENDOR_APP_URL` / `VITE_ADMIN_APP_URL` (or `VITE_PORTAL`) differ. Local fallback is `/vendor` and `/admin` on the same origin. Vendor/admin login persists the session **only after** portal eligibility (admin role; vendor = partner role + active membership). Auth details: [security-and-authorization.md](../engineering/security-and-authorization.md).
 
 ## APIs
 
@@ -22,7 +24,7 @@ Role after login: `homePathForRole` → `/dashboard` · `/vendor` · `/admin`.
 | POST | `/api/auth/login` | no | `{ email, password }` → `{ accessToken, refreshToken, user }` |
 | POST | `/api/auth/refresh` | no | `{ refreshToken }` |
 | POST | `/api/auth/logout` | no | revokes refresh |
-| GET | `/api/users/me` | Bearer | `{ id, email, fullName, role, roles[], firstName, lastName, phone, address }` |
+| GET | `/api/users/me` | Bearer | `{ id, email, fullName, role, roles[], partnerMemberships[], firstName, lastName, phone, address }` |
 | PATCH | `/api/users/me` | Bearer | `{ firstName, lastName, phone, email, address? }` → same user shape. No password change. |
 
 The signup form validates every field at once on **Sign up** and does not call the API until the form is clean. The server repeats the same rules.
@@ -43,7 +45,7 @@ The phone field is India-only (`+91` shown, not editable). The guest types 10 di
 | `identity.refresh_tokens` | rotatable refresh; logout revokes |
 | `audit.events` | login/logout and later sensitive actions (no secrets) |
 
-Guest request access: `POST /api/auth/guest/verify-start` then `verify` with purpose `REQUEST_ACCESS`. Codes go through `IOtpService` / `IOtpProvider`. Local UAT uses `LocalOtpProvider` (`560142` only there, and only shown when `DemoMode=true`). The resulting JWT is a customer token, optionally scoped with `request_id`. It cannot become admin or partner.
+Guest request access: `POST /api/auth/guest/verify-start` then `verify` with purpose `REQUEST_ACCESS`. Codes go through `IOtpService` / `IOtpProvider` selected at startup (`Otp:Provider=local` today; `twilio` refuses to start until that adapter exists). Local UAT uses `LocalOtpProvider` (`560142` only there, and only shown when `DemoMode=true`). The resulting JWT is `auth_kind=guest_request`, scoped with `request_id`. It cannot become admin or partner and cannot list every request on `/api/availability/mine`.
 
 ## Seed
 

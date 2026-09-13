@@ -20,16 +20,15 @@ export async function getPaymentIntentById(id: string): Promise<ServerPaymentInt
   return apiFetch<ServerPaymentIntent>(`/api/payment/intents/${encodeURIComponent(id)}`);
 }
 
-export async function postFakePaymentWebhook(
+/** Development/demo only. Uses the admin server action so the browser never holds a webhook secret. */
+export async function postAdminSimulatePayment(
   intentId: string,
   providerEventId: string,
   amountInr: number,
   currency = "INR",
 ): Promise<ServerPaymentIntent> {
-  const secret = import.meta.env.VITE_FAKE_WEBHOOK_SECRET as string | undefined;
-  return apiFetch<ServerPaymentIntent>("/api/payment/webhooks/local", {
+  return apiFetch<ServerPaymentIntent>("/api/admin/payments/simulate", {
     method: "POST",
-    headers: secret ? { "X-Webhook-Secret": secret } : { "X-Webhook-Secret": "local-dev-webhook-secret" },
     body: JSON.stringify({ intentId, providerEventId, amountInr, currency }),
   });
 }

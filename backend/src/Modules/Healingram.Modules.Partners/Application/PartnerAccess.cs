@@ -24,4 +24,9 @@ internal sealed class PartnerAccess(IPartnerStore store) : IPartnerAccess, IPart
 
     public Task<bool> CanModifyRequestAsync(Guid userId, string retreatSlug, CancellationToken cancellationToken)
         => CanAccessRetreatAsync(userId, retreatSlug, cancellationToken);
+
+    public Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+        => store.ListMembershipsForUserAsync(userId, cancellationToken);
 }

@@ -1,3 +1,4 @@
+using Healingram.Contracts.Partners;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 
@@ -35,6 +36,40 @@ internal sealed class PostgresPartnerStore(IConfiguration configuration) : IPart
         }
 
         return slugs;
+    }
+
+    public async Task<IReadOnlyList<PartnerMembership>> ListMembershipsForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT p.id, p.display_name, COALESCE(NULLIF(pu.membership_role, ''), 'member'), p.status
+            FROM partners.partner_users pu
+            INNER JOIN partners.partners p ON p.id = pu.partner_id
+            WHERE pu.user_id = @userId
+            ORDER BY p.display_name
+            """,
+            connection);
+        command.Parameters.AddWithValue("userId", userId);
+
+        var items = new List<PartnerMembership>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var partnerStatus = reader.GetString(3);
+            items.Add(new PartnerMembership(
+                reader.GetGuid(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                string.Equals(partnerStatus, "approved", StringComparison.OrdinalIgnoreCase)
+                    ? "active"
+                    : partnerStatus));
+        }
+
+        return items;
     }
 
     public async Task SeedLocalPartnerAsync(CancellationToken cancellationToken)

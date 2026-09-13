@@ -1,9 +1,14 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { authErrorMessage, loginWithPassword } from "../../lib/api/auth";
-import { userHasRole } from "../../lib/api/auth";
+import {
+  authErrorMessage,
+  loginWithPassword,
+  persistAuthenticatedSession,
+  userHasActivePartnerMembership,
+  userHasRole,
+} from "../../lib/api/auth";
 import { applyAuthUser } from "../../lib/auth";
-import { isDemoMode, resolvePortal } from "../../lib/runtimeConfig";
+import { isDemoMode, staffLoginDestination } from "../../lib/runtimeConfig";
 
 export function VendorLogin() {
   const navigate = useNavigate();
@@ -19,14 +24,20 @@ export function VendorLogin() {
     setBusy(true);
     setError(null);
     try {
-      const session = await loginWithPassword(email.trim(), password);
-      applyAuthUser(session.user);
-      if (!userHasRole(session.user, "partner") && !userHasRole(session.user, "admin")) {
-        setError("This account is not a retreat partner.");
+      const session = await loginWithPassword(email.trim(), password, false);
+      const vendorOk = userHasRole(session.user, "admin")
+        || (userHasRole(session.user, "partner") && userHasActivePartnerMembership(session.user));
+      if (!vendorOk) {
+        setError(
+          userHasRole(session.user, "partner")
+            ? "This account is not linked to an active partner membership."
+            : "This account is not a retreat partner.",
+        );
         return;
       }
-      const dest = resolvePortal() === "vendor" ? "/" : from.startsWith("/vendor") ? from : "/vendor";
-      navigate(dest, { replace: true });
+      await persistAuthenticatedSession(session);
+      applyAuthUser(session.user);
+      navigate(staffLoginDestination("vendor", from), { replace: true });
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {

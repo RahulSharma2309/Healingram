@@ -1,4 +1,5 @@
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Otp;
 using Healingram.Modules.Availability.Application;
 using Healingram.Modules.Availability.Tests.Fakes;
 using Xunit;
@@ -79,9 +80,49 @@ public class GuestRequestAccessTests
         var mine = await service.CreateAsync(AvailabilityHarness.Request("own-stay"), owner, CancellationToken.None);
         await service.CreateAsync(AvailabilityHarness.Request("other-stay"), other, CancellationToken.None);
 
-        var listed = await service.ListMineAsync(owner.UserId!.Value, CancellationToken.None);
+        var listed = await service.ListMineAsync(owner, CancellationToken.None);
 
         Assert.Single(listed);
         Assert.Equal(mine.Entity!.PublicId, listed[0].PublicId);
+    }
+
+    [Fact]
+    public async Task Guest_token_lists_only_the_scoped_request()
+    {
+        var ownerId = Guid.NewGuid();
+        var owner = new Actor(Roles.Customer, ownerId);
+        var (service, _, _) = AvailabilityHarness.Create(ownerId);
+        var first = await service.CreateAsync(AvailabilityHarness.Request("own-stay"), owner, CancellationToken.None);
+        await service.CreateAsync(AvailabilityHarness.Request("other-stay"), owner, CancellationToken.None);
+
+        var guest = new Actor(
+            Roles.Customer,
+            ownerId,
+            OtpPurposes.RequestAccess,
+            first.Entity!.PublicId,
+            [Roles.Customer],
+            AuthKinds.GuestRequest);
+        var listed = await service.ListMineAsync(guest, CancellationToken.None);
+
+        Assert.Single(listed);
+        Assert.Equal(first.Entity.PublicId, listed[0].PublicId);
+    }
+
+    [Fact]
+    public async Task Anonymous_create_against_registered_contact_asks_to_sign_in()
+    {
+        var fixture = AvailabilityHarness.Create();
+        fixture.Guests.RequiresSignIn = true;
+
+        var result = await fixture.Service.CreateAsync(
+            AvailabilityHarness.Request(),
+            new Actor(Roles.Customer, null),
+            CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Validation, result.Kind);
+        Assert.Contains(
+            "You already have a Healingram account. Please sign in to continue.",
+            result.Details ?? []);
+        Assert.Empty(fixture.Store.Items);
     }
 }

@@ -4,6 +4,14 @@ public static class PaymentProviders
 {
     public const string Local = "local";
     public const string Fake = "fake";
+    public const string Razorpay = "razorpay";
+    public const string Stripe = "stripe";
+
+    public static string Normalize(string? configured)
+        => string.IsNullOrWhiteSpace(configured) ? Local : configured.Trim().ToLowerInvariant();
+
+    public static bool IsImplemented(string? configured)
+        => Normalize(configured) is Local or Fake;
 }
 
 public static class NormalizedPaymentStatuses

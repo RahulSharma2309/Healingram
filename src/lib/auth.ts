@@ -41,11 +41,12 @@ export function homePathForRole(role?: string | null): string {
 }
 
 export function isLoggedIn(): boolean {
+  if (!getAccessToken()) return false;
   try {
     if (localStorage.getItem(AUTH_KEY) !== "1") return false;
     return (localStorage.getItem(ACCOUNT_STATUS_KEY) || "registered") !== "guest";
   } catch {
-    return false;
+    return Boolean(getAccessToken());
   }
 }
 
