@@ -40,6 +40,12 @@ internal sealed class FakePartnerAccess : IPartnerAccess
 
     public Task<IReadOnlyList<string>> ListRetreatSlugsForUserAsync(Guid userId, CancellationToken cancellationToken)
         => Task.FromResult(_byUser.TryGetValue(userId, out var slugs) ? slugs : DefaultSlugs);
+
+    public async Task<bool> CanAccessRetreatAsync(Guid userId, string retreatSlug, CancellationToken cancellationToken)
+    {
+        var slugs = await ListRetreatSlugsForUserAsync(userId, cancellationToken);
+        return slugs.Any(slug => slug.Equals(retreatSlug, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 internal sealed class FakeGuestIdentityPort(Guid customerId) : IGuestIdentityPort
@@ -103,6 +109,7 @@ internal static class AvailabilityHarness
         var store = new InMemoryAvailabilityStore();
         var bookings = new RecordingBookingCommands();
         var partners = new FakePartnerAccess();
+        partners.Map(Partner.UserId!.Value, slugs);
         var payments = new FakeBookingPaymentPort();
         var service = new AvailabilityService(
             store,

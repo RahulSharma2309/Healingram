@@ -1,6 +1,7 @@
 /**
- * Payment helpers. The browser never marks a booking paid.
- * Only POST /api/payment/webhooks/fake (server) can set paid.
+ * Payment display helpers. The browser never marks a booking paid.
+ * Server PaymentService + IPaymentProvider is the source of truth.
+ * localStorage caches checkout UX only.
  */
 
 import type { SettlementMode } from "../data/programmePricing";
@@ -169,8 +170,12 @@ export async function simulateVerifiedPaymentWebhook(requestId: string): Promise
       rememberIntentId(requestId, created.id);
     }
 
-    const paid = await postFakePaymentWebhook(intentId, `demo_wh_${crypto.randomUUID()}`);
-    if (paid.status !== "paid") {
+    const paid = await postFakePaymentWebhook(
+      intentId,
+      `demo_wh_${crypto.randomUUID()}`,
+      request.finalPayableAmount,
+    );
+    if (paid.status !== "paid" && paid.status !== "succeeded") {
       return { ok: false, message: "Server did not mark this intent paid." };
     }
 

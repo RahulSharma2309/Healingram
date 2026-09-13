@@ -23,12 +23,13 @@ export async function getPaymentIntentById(id: string): Promise<ServerPaymentInt
 export async function postFakePaymentWebhook(
   intentId: string,
   providerEventId: string,
+  amountInr: number,
+  currency = "INR",
 ): Promise<ServerPaymentIntent> {
-  const secret =
-    (import.meta.env.VITE_FAKE_WEBHOOK_SECRET as string | undefined) ?? "local-dev-webhook-secret";
-  return apiFetch<ServerPaymentIntent>("/api/payment/webhooks/fake", {
+  const secret = import.meta.env.VITE_FAKE_WEBHOOK_SECRET as string | undefined;
+  return apiFetch<ServerPaymentIntent>("/api/payment/webhooks/local", {
     method: "POST",
-    headers: { "X-Webhook-Secret": secret },
-    body: JSON.stringify({ intentId, providerEventId }),
+    headers: secret ? { "X-Webhook-Secret": secret } : { "X-Webhook-Secret": "local-dev-webhook-secret" },
+    body: JSON.stringify({ intentId, providerEventId, amountInr, currency }),
   });
 }

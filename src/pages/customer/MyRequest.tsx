@@ -54,6 +54,7 @@ export function MyRequest() {
           Enter the email or mobile number you used for your request. We’ll send a verification code.
         </p>
         <GuestVerifyForm
+          publicId={requestId}
           onResolved={(session) => {
             if (!session) {
               setRequests([]);

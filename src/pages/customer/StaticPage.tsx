@@ -1,9 +1,9 @@
 type Props = { title: string; contact?: boolean; faq?: boolean };
 
 const faqs = [
-  { q: "How do I book a retreat?", a: "Search, select dates, pay online, and receive instant confirmation." },
-  { q: "Can I cancel my booking?", a: "Most retreats offer free cancellation up to 7 days before check-in." },
-  { q: "Is payment secure?", a: "Yes — Razorpay/Stripe integration in production." },
+  { q: "How do I book a retreat?", a: "Choose a programme, request availability, and pay only after the retreat confirms." },
+  { q: "Can I cancel my booking?", a: "Cancellation terms are confirmed with the retreat when they accept your request." },
+  { q: "Is payment secure?", a: "Payment is created on the server and marked paid only after a verified provider event." },
 ];
 
 export function StaticPage({ title, contact, faq }: Props) {

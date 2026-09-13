@@ -7,6 +7,7 @@
  */
 
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { vendorPortalHref } from "../lib/runtimeConfig";
 import { ChevronDown, Heart, Menu, User, X } from "lucide-react";
 import {
   useCallback,
@@ -509,19 +510,19 @@ export function CustomerHeader() {
       <div className="hidden md:block bg-sage-800 text-white text-[11px] tracking-wide">
         <div className="max-w-7xl mx-auto px-4 h-8 flex items-center justify-between gap-4">
           <p className="opacity-90 truncate">
-            Verified wellness retreats
+            Programme-led wellness retreats
             <span className="mx-2 opacity-40">·</span>
             Transparent programme pricing
             <span className="mx-2 opacity-40">·</span>
             Expert help before you book
           </p>
-          <Link
-            to="/vendor"
+          <a
+            href={vendorPortalHref()}
             className="shrink-0 font-medium opacity-90 hover:opacity-100 hover:text-teal-200"
             data-header-item={item9.id}
           >
             {item9.label}
-          </Link>
+          </a>
         </div>
       </div>
 
@@ -736,14 +737,14 @@ export function CustomerHeader() {
             <WhatsAppIcon className="w-4 h-4" />
             {item8.label}
           </Link>
-          <Link
-            to="/vendor"
+          <a
+            href={vendorPortalHref()}
             onClick={closeMobile}
             className="block text-center text-xs text-gray-500 pb-3 hover:text-teal-700"
             data-header-item={item9.id}
           >
             {item9.label}
-          </Link>
+          </a>
         </nav>
       )}
     </header>

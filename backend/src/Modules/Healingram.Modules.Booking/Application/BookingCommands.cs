@@ -69,7 +69,11 @@ internal static class BookingSnapshot
             ["priceSnapshot"] = price.DeepClone(),
             ["finalAmountInr"] = command.FinalAmountInr is { } amount
                 ? JsonValue.Create(amount)
-                : null
+                : null,
+            ["customerUserId"] = command.CustomerUserId is { } customer
+                ? customer.ToString()
+                : null,
+            ["currency"] = "INR"
         };
         return wrapper.ToJsonString(Json);
     }
@@ -92,7 +96,27 @@ internal static class BookingSnapshot
             amount = parsed;
         }
 
-        return new BookingPaymentGate(entity.Id, entity.BookingNumber, entity.Status, amount, publicId);
+        Guid? customerUserId = null;
+        if (root.TryGetProperty("customerUserId", out var customerNode)
+            && customerNode.ValueKind == JsonValueKind.String
+            && Guid.TryParse(customerNode.GetString(), out var parsedCustomer))
+        {
+            customerUserId = parsedCustomer;
+        }
+
+        var currency = root.TryGetProperty("currency", out var currencyNode)
+                       && currencyNode.ValueKind == JsonValueKind.String
+            ? currencyNode.GetString() ?? "INR"
+            : "INR";
+
+        return new BookingPaymentGate(
+            entity.Id,
+            entity.BookingNumber,
+            entity.Status,
+            amount,
+            publicId,
+            customerUserId,
+            currency);
     }
 }
 

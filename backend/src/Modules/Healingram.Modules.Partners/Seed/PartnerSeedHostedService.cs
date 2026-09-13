@@ -14,14 +14,14 @@ internal sealed class PartnerSeedHostedService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (environment.IsEnvironment("Testing"))
+        if (environment.IsProduction() || environment.IsEnvironment("Testing"))
         {
-            logger.LogInformation("Partners seed skipped in Testing environment");
+            logger.LogInformation("Partners seed skipped in {Env}", environment.EnvironmentName);
             return;
         }
 
         var applySchema = configuration.GetValue("Schema:ApplyOnStartup", true);
-        if (!configuration.GetValue("Partners:SeedOnStartup", applySchema))
+        if (!configuration.GetValue("Partners:SeedOnStartup", environment.IsDevelopment() && applySchema))
         {
             return;
         }

@@ -61,6 +61,12 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
                 await insertCredential.ExecuteNonQueryAsync(cancellationToken);
             }
 
+            await InsertRoleAsync(connection, tx, user.Id, user.Role, cancellationToken);
+            if (string.Equals(user.Role, Roles.Admin, StringComparison.OrdinalIgnoreCase))
+            {
+                await InsertAdminPermissionsAsync(connection, tx, user.Id, cancellationToken);
+            }
+
             await tx.CommitAsync(cancellationToken);
             return user;
         }
@@ -86,6 +92,7 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
         try
         {
             await command.ExecuteNonQueryAsync(cancellationToken);
+            await GrantRoleAsync(user.Id, user.Role, cancellationToken);
             return user with { AccountStatus = AccountStatuses.Guest };
         }
         catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
@@ -319,6 +326,111 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
         command.Parameters.AddWithValue("userId", userId);
         command.Parameters.AddWithValue("slug", slug);
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> ListRolesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT role FROM identity.user_roles WHERE user_id = @id
+            UNION
+            SELECT role FROM identity.users WHERE id = @id
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", userId);
+        var roles = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            roles.Add(reader.GetString(0));
+        }
+
+        return RoleAuthorization.NormalizeRoles(roles);
+    }
+
+    public async Task GrantRoleAsync(Guid userId, string role, CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await InsertRoleAsync(connection, null, userId, role, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> ListAdminPermissionsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "SELECT permission FROM identity.admin_permissions WHERE user_id = @id",
+            connection);
+        command.Parameters.AddWithValue("id", userId);
+        var permissions = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            permissions.Add(reader.GetString(0));
+        }
+
+        return permissions;
+    }
+
+    public async Task GrantAdminPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO identity.admin_permissions (user_id, permission)
+            VALUES (@id, @permission)
+            ON CONFLICT DO NOTHING
+            """,
+            connection);
+        command.Parameters.AddWithValue("id", userId);
+        command.Parameters.AddWithValue("permission", permission);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertRoleAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? tx,
+        Guid userId,
+        string role,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO identity.user_roles (user_id, role)
+            VALUES (@id, @role)
+            ON CONFLICT DO NOTHING
+            """,
+            connection,
+            tx);
+        command.Parameters.AddWithValue("id", userId);
+        command.Parameters.AddWithValue("role", role);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task InsertAdminPermissionsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction tx,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        foreach (var permission in AdminPermissions.All)
+        {
+            await using var command = new NpgsqlCommand(
+                """
+                INSERT INTO identity.admin_permissions (user_id, permission)
+                VALUES (@id, @permission)
+                ON CONFLICT DO NOTHING
+                """,
+                connection,
+                tx);
+            command.Parameters.AddWithValue("id", userId);
+            command.Parameters.AddWithValue("permission", permission);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     private async Task<IdentityUser?> QueryUserAsync(

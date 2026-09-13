@@ -10,14 +10,20 @@ namespace Healingram.Modules.Identity.Data;
 internal sealed class IdentitySeedHostedService(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
+    IHostEnvironment environment,
     ILogger<IdentitySeedHostedService> logger) : IHostedService
 {
     internal const string SeedPassword = "Local123!";
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        if (environment.IsProduction() || environment.IsEnvironment("Testing"))
+        {
+            return;
+        }
+
         var applySchema = configuration.GetValue("Schema:ApplyOnStartup", true);
-        if (!configuration.GetValue("Identity:SeedOnStartup", applySchema))
+        if (!configuration.GetValue("Identity:SeedOnStartup", environment.IsDevelopment() && applySchema))
         {
             return;
         }
@@ -50,6 +56,7 @@ internal sealed class IdentitySeedHostedService(
         try
         {
             await store.CreateUserAsync(user, hasher.Hash(SeedPassword), cancellationToken);
+            await store.GrantRoleAsync(user.Id, Roles.Customer, cancellationToken);
             logger.LogInformation("Seeded {Role} user {UserId}", role, user.Id);
         }
         catch (DuplicateEmailException)

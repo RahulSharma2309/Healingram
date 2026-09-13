@@ -8,6 +8,7 @@ export type AuthUser = {
   email: string;
   fullName: string | null;
   role: string;
+  roles?: string[];
   firstName?: string | null;
   lastName?: string | null;
   phone?: string | null;
@@ -15,6 +16,12 @@ export type AuthUser = {
   phoneCountryCode?: string | null;
   accountStatus?: string | null;
 };
+
+export function userHasRole(user: Pick<AuthUser, "role" | "roles">, role: string): boolean {
+  const wanted = role.toLowerCase();
+  if (user.role.toLowerCase() === wanted) return true;
+  return (user.roles ?? []).some((item) => item.toLowerCase() === wanted);
+}
 
 export type TokenResponse = {
   accessToken: string;
@@ -76,16 +83,16 @@ export async function registerAccount(input: {
   return tokens;
 }
 
-export const LOCAL_GUEST_CODE = "560142";
-
 export async function startGuestVerification(input: {
   email?: string;
   phone?: string;
   channel: "email" | "phone";
-}): Promise<void> {
-  await apiFetch("/api/auth/guest/verify-start", {
+  publicId?: string;
+  purpose?: string;
+}): Promise<{ sent: boolean; demoCode?: string }> {
+  return apiFetch("/api/auth/guest/verify-start", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, purpose: input.purpose ?? "REQUEST_ACCESS" }),
   });
 }
 
@@ -93,10 +100,12 @@ export async function verifyGuestRequest(input: {
   email?: string;
   phone?: string;
   code: string;
+  publicId?: string;
+  purpose?: string;
 }): Promise<TokenResponse | null> {
   const result = await apiFetch<TokenResponse & { matched?: boolean }>("/api/auth/guest/verify", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, purpose: input.purpose ?? "REQUEST_ACCESS" }),
   });
   if (result.matched === false || !result.accessToken) {
     return null;

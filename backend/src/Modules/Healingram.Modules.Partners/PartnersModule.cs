@@ -19,7 +19,9 @@ public sealed class PartnersModule : IAppModule
     public void Register(IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<IPartnerStore, PostgresPartnerStore>();
-        services.AddScoped<IPartnerAccess, PartnerAccess>();
+        services.AddScoped<PartnerAccess>();
+        services.AddScoped<IPartnerAccess>(sp => sp.GetRequiredService<PartnerAccess>());
+        services.AddScoped<IPartnerAuthorization>(sp => sp.GetRequiredService<PartnerAccess>());
         services.AddHostedService<PartnerSeedHostedService>();
     }
 

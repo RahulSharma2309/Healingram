@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 namespace Healingram.Modules.Payment.Application;
 
 internal static class PaymentStatuses
@@ -8,7 +10,8 @@ internal static class PaymentStatuses
 
 internal static class PaymentProviders
 {
-    public const string Fake = "fake";
+    public const string Local = "local";
+    public const string Fake = "local";
 }
 
 internal static class PaymentWebhookHeaders
@@ -20,26 +23,42 @@ internal sealed class PaymentSettings
 {
     public const string DefaultFakeWebhookSecret = "local-dev-webhook-secret";
 
-    public string FakeWebhookSecret { get; init; } = DefaultFakeWebhookSecret;
+    public string WebhookSecret { get; init; } = DefaultFakeWebhookSecret;
+    public string FakeWebhookSecret => WebhookSecret;
+    public string ProviderName { get; init; } = PaymentProviders.Local;
+    public bool AllowLocalSimulate { get; init; } = true;
 
     public static PaymentSettings From(Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
-        var secret = configuration["Payment:FakeWebhookSecret"];
+        var secret = configuration["Payment:WebhookSecret"] ?? configuration["Payment:FakeWebhookSecret"];
         return new PaymentSettings
         {
-            FakeWebhookSecret = string.IsNullOrWhiteSpace(secret) ? DefaultFakeWebhookSecret : secret
+            WebhookSecret = string.IsNullOrWhiteSpace(secret) ? DefaultFakeWebhookSecret : secret,
+            ProviderName = configuration["Payment:Provider"] ?? PaymentProviders.Local,
+            AllowLocalSimulate = configuration.GetValue("Payment:AllowLocalSimulate", true)
         };
     }
 }
 
+internal sealed record PaymentActor(Guid? UserId, bool IsGuest, bool IsAdmin)
+{
+    public static PaymentActor Anonymous { get; } = new(null, false, false);
+}
+
 internal sealed record CreatePaymentIntentRequest(string? PublicId, string? IdempotencyKey);
 
-internal sealed record FakeWebhookRequest(Guid? IntentId, string? ProviderEventId);
+internal sealed record FakeWebhookRequest(
+    Guid? IntentId,
+    string? ProviderEventId,
+    decimal? AmountInr = null,
+    string? Currency = null,
+    Guid? BookingId = null);
 
 internal sealed class PaymentIntentEntity
 {
     public Guid Id { get; init; }
     public Guid BookingId { get; init; }
+    public Guid? CustomerUserId { get; init; }
     public required string Provider { get; init; }
     public string? ProviderRef { get; init; }
     public decimal AmountInr { get; init; }

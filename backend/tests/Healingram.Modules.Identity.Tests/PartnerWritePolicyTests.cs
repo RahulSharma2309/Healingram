@@ -36,6 +36,11 @@ public class PartnerWritePolicyTests
 
         Assert.False(customer.Succeeded);
         Assert.True(partner.Succeeded);
+
+        var adminDenied = await authorization.AuthorizeAsync(Principal(Roles.Customer), IdentityPolicies.AdminWrite);
+        var adminAllowed = await authorization.AuthorizeAsync(Principal(Roles.Admin), IdentityPolicies.AdminWrite);
+        Assert.False(adminDenied.Succeeded);
+        Assert.True(adminAllowed.Succeeded);
     }
 
     private static ClaimsPrincipal Principal(string role)

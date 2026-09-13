@@ -25,10 +25,5 @@ public class DuplicateEmailTests
         Assert.Equal("Email already registered", second.Error);
     }
 
-    private static AuthService CreateService()
-        => new(
-            new InMemoryIdentityStore(),
-            new AspNetIdentityPasswordHasher(),
-            new StubTokenService(),
-            NullLogger<AuthService>.Instance);
+    private static AuthService CreateService() => AuthTestKit.Create();
 }

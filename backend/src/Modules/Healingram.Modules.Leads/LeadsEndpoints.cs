@@ -20,7 +20,8 @@ internal static class LeadsEndpoints
             CreateLeadRequest? body,
             LeadService service,
             CancellationToken cancellationToken)
-            => Handle(service.CreateAsync(body, cancellationToken)));
+            => Handle(service.CreateAsync(body, cancellationToken)))
+            .RequireRateLimiting("sensitive");
 
         leads.MapGet("/{id:guid}", (
             Guid id,

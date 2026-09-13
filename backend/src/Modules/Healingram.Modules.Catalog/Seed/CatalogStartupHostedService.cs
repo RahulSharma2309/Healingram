@@ -11,9 +11,9 @@ internal sealed class CatalogStartupHostedService(
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (environment.IsEnvironment("Testing"))
+        if (environment.IsProduction() || environment.IsEnvironment("Testing"))
         {
-            logger.LogInformation("Catalog seed skipped in Testing environment");
+            logger.LogInformation("Catalog seed skipped in {Env}", environment.EnvironmentName);
             return;
         }
 

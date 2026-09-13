@@ -1,8 +1,11 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Healingram.BuildingBlocks.Health;
 using Healingram.BuildingBlocks.Modules;
 using Healingram.BuildingBlocks.Notifications;
 using Healingram.BuildingBlocks.Observability;
 using Healingram.BuildingBlocks.Persistence;
+using Healingram.BuildingBlocks.Runtime;
 using Healingram.Modules.Availability;
 using Healingram.Modules.Booking;
 using Healingram.Modules.Catalog;
@@ -16,6 +19,19 @@ using OpenTelemetry.Trace;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+HealingramRuntime.EnsureSafeToStart(builder.Environment, builder.Configuration);
+builder.Services.AddSingleton(HealingramRuntime.From(builder.Environment, builder.Configuration));
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("sensitive", limiter =>
+    {
+        limiter.PermitLimit = 20;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+});
 
 builder.Host.UseSerilog((ctx, _, config) =>
 {
@@ -71,6 +87,7 @@ builder.Services.AddOpenTelemetry()
 var app = builder.Build();
 
 app.UseHealingramCorrelationId();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseSerilogRequestLogging();

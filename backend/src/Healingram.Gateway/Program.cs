@@ -1,10 +1,13 @@
 using Healingram.BuildingBlocks.Observability;
+using Healingram.BuildingBlocks.Runtime;
 using Healingram.Gateway;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+HealingramRuntime.EnsureSafeToStart(builder.Environment, builder.Configuration, requireApiSecrets: false);
+var runtime = HealingramRuntime.From(builder.Environment, builder.Configuration);
 
 builder.Host.UseSerilog((ctx, _, config) =>
 {
@@ -19,7 +22,7 @@ builder.Host.UseSerilog((ctx, _, config) =>
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+        policy.WithOrigins(runtime.CorsOrigins.ToArray())
             .AllowAnyHeader()
             .AllowAnyMethod());
 });

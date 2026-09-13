@@ -33,13 +33,13 @@ import {
 import { formatDisplayDate } from "../../lib/pricing";
 import { formatInr, updateProgrammeVerifiedPrice } from "../../data/programmePricing";
 import { simulateVerifiedPaymentWebhook } from "../../lib/payment";
+import { isDemoMode } from "../../lib/runtimeConfig";
 
 const STATUSES: AvailabilityRequestStatus[] = [
   "REQUESTED",
   "AVAILABLE",
   "ALTERNATIVE_PROPOSED",
   "PAYMENT_PENDING",
-  "PAID",
   "CONFIRMED",
   "COMPLETED",
   "REJECTED",
@@ -419,17 +419,19 @@ export function AdminDashboard() {
             >
               Resend customer notification
             </button>
-            <button
-              type="button"
-              className="px-3 py-1.5 border border-amber-300 text-amber-900 rounded text-sm"
-              onClick={async () => {
-                const result = await simulateVerifiedPaymentWebhook(selected.requestId);
-                setMsg(result.message);
-                refresh();
-              }}
-            >
-              Simulate verified payment webhook
-            </button>
+            {isDemoMode() ? (
+              <button
+                type="button"
+                className="px-3 py-1.5 border border-amber-300 text-amber-900 rounded text-sm"
+                onClick={async () => {
+                  const result = await simulateVerifiedPaymentWebhook(selected.requestId);
+                  setMsg(result.message);
+                  refresh();
+                }}
+              >
+                Simulate verified payment webhook
+              </button>
+            ) : null}
           </div>
 
           <div>

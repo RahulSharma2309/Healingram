@@ -6,4 +6,6 @@ namespace Healingram.Contracts.Partners;
 public interface IPartnerAccess
 {
     Task<IReadOnlyList<string>> ListRetreatSlugsForUserAsync(Guid userId, CancellationToken cancellationToken);
+
+    Task<bool> CanAccessRetreatAsync(Guid userId, string retreatSlug, CancellationToken cancellationToken);
 }

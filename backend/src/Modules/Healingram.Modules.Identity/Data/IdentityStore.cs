@@ -36,4 +36,8 @@ internal interface IIdentityStore
     Task<IReadOnlyList<string>> ListWishlistSlugsAsync(Guid userId, CancellationToken cancellationToken);
     Task<bool> TryAddWishlistAsync(Guid userId, string slug, CancellationToken cancellationToken);
     Task RemoveWishlistAsync(Guid userId, string slug, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ListRolesAsync(Guid userId, CancellationToken cancellationToken);
+    Task GrantRoleAsync(Guid userId, string role, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> ListAdminPermissionsAsync(Guid userId, CancellationToken cancellationToken);
+    Task GrantAdminPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken);
 }

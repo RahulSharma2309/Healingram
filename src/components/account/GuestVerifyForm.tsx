@@ -3,18 +3,20 @@ import { FieldHint } from "./FieldHint";
 import { IndiaPhoneField } from "./IndiaPhoneField";
 import {
   authErrorMessage,
-  LOCAL_GUEST_CODE,
   startGuestVerification,
   verifyGuestRequest,
   type TokenResponse,
 } from "../../lib/api/auth";
+import { isDemoMode } from "../../lib/runtimeConfig";
 
 const fieldClass = "w-full mt-1 border border-sand-200 rounded-lg px-3 py-2";
 
 export function GuestVerifyForm({
   onResolved,
+  publicId,
 }: {
   onResolved: (session: TokenResponse | null) => void;
+  publicId?: string;
 }) {
   const [channel, setChannel] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
@@ -23,17 +25,20 @@ export function GuestVerifyForm({
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [demoCode, setDemoCode] = useState<string | null>(null);
 
   const onSend = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await startGuestVerification({
+      const started = await startGuestVerification({
         channel,
         email: channel === "email" ? email.trim() : undefined,
         phone: channel === "phone" ? phone : undefined,
+        publicId,
       });
+      setDemoCode(started.demoCode ?? null);
       setSent(true);
     } catch (err) {
       setError(authErrorMessage(err));
@@ -51,6 +56,7 @@ export function GuestVerifyForm({
         email: channel === "email" ? email.trim() : undefined,
         phone: channel === "phone" ? phone : undefined,
         code: code.trim(),
+        publicId,
       });
       onResolved(session);
     } catch (err) {
@@ -128,7 +134,9 @@ export function GuestVerifyForm({
         />
         <FieldHint message={error ?? undefined} />
       </label>
-      <p className="text-xs text-gray-500">Local UAT: enter {LOCAL_GUEST_CODE} (stand-in for SMS/email OTP).</p>
+      {isDemoMode() && demoCode ? (
+        <p className="text-xs text-gray-500">Development OTP: {demoCode}</p>
+      ) : null}
       <button
         type="submit"
         disabled={busy}
