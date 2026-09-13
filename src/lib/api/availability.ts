@@ -9,7 +9,12 @@ export type ServerAvailability = {
   retreatSlug?: string;
   programmeSlug?: string;
   requestedAt?: string;
+  partnerViewedAt?: string | null;
+  partnerRespondedAt?: string | null;
   finalAmountInr?: number | null;
+  snapshot?: Record<string, unknown>;
+  alternative?: unknown;
+  history?: { fromStatus?: string; toStatus: string; occurredAt: string; reason?: string | null }[];
 };
 
 export async function postAvailabilityRequest(input: {
@@ -22,6 +27,7 @@ export async function postAvailabilityRequest(input: {
   customerName: string;
   email: string;
   phone: string;
+  quoteId?: string;
 }): Promise<ServerAvailability> {
   return apiFetch<ServerAvailability>("/api/availability/requests", {
     method: "POST",
@@ -41,31 +47,32 @@ export async function fetchMyAvailabilityRequests(): Promise<ServerAvailability[
   return data.items ?? [];
 }
 
-export async function partnerConfirmOnServer(publicId: string, finalAmountInr?: number): Promise<void> {
-  await apiFetch(`/api/availability/requests/${encodeURIComponent(publicId)}/confirm`, {
+export async function partnerConfirmOnServer(publicId: string, finalAmountInr?: number): Promise<ServerAvailability> {
+  return apiFetch<ServerAvailability>(`/api/availability/requests/${encodeURIComponent(publicId)}/confirm`, {
     method: "POST",
     body: JSON.stringify({ finalAmountInr: finalAmountInr ?? null }),
   });
 }
 
-export async function partnerUnavailableOnServer(publicId: string, reason: string): Promise<void> {
-  await apiFetch(`/api/availability/requests/${encodeURIComponent(publicId)}/unavailable`, {
+export async function partnerUnavailableOnServer(publicId: string, reason: string): Promise<ServerAvailability> {
+  return apiFetch<ServerAvailability>(`/api/availability/requests/${encodeURIComponent(publicId)}/unavailable`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
 }
 
-export async function partnerAlternativeOnServer(publicId: string, proposal: unknown): Promise<void> {
-  await apiFetch(`/api/availability/requests/${encodeURIComponent(publicId)}/alternative`, {
+export async function partnerAlternativeOnServer(publicId: string, proposal: unknown): Promise<ServerAvailability> {
+  return apiFetch<ServerAvailability>(`/api/availability/requests/${encodeURIComponent(publicId)}/alternative`, {
     method: "POST",
     body: JSON.stringify({ proposal }),
   });
 }
 
-export async function acceptAlternativeOnServer(publicId: string): Promise<void> {
-  await apiFetch(`/api/availability/requests/${encodeURIComponent(publicId)}/accept-alternative`, {
-    method: "POST",
-  });
+export async function acceptAlternativeOnServer(publicId: string): Promise<ServerAvailability> {
+  return apiFetch<ServerAvailability>(
+    `/api/availability/requests/${encodeURIComponent(publicId)}/accept-alternative`,
+    { method: "POST" },
+  );
 }
 
 export async function fetchPartnerQueue(): Promise<ServerAvailability[]> {

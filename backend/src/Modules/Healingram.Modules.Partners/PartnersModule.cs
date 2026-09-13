@@ -26,5 +26,8 @@ public sealed class PartnersModule : IAppModule
     }
 
     public void MapEndpoints(IEndpointRouteBuilder app)
-        => app.MapGet("/api/partners/ready", () => Results.Ok(new { module = Name })).WithTags("Partners");
+    {
+        app.MapGet("/api/partners/ready", () => Results.Ok(new { module = Name })).WithTags("Partners");
+        PartnerEndpoints.Map(app);
+    }
 }

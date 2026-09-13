@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
-import { fetchCurrentUser, userHasActivePartnerMembership, userHasRole, type AuthUser } from "../../lib/api/auth";
-import { getAccessToken } from "../../lib/api/client";
+import { userHasActivePartnerMembership, userHasRole } from "../../lib/api/auth";
+import { useAuth } from "../../lib/auth/AuthProvider";
 import { adminPortalHref, vendorPortalHref } from "../../lib/runtimeConfig";
 
 function Forbidden({ title, homeTo }: { title: string; homeTo: string }) {
@@ -18,24 +18,10 @@ function Forbidden({ title, homeTo }: { title: string; homeTo: string }) {
   );
 }
 
-function useServerUser() {
-  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
-  useEffect(() => {
-    if (!getAccessToken()) {
-      setUser(null);
-      return;
-    }
-    fetchCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null));
-  }, []);
-  return user;
-}
-
 export function VendorPortalGuard({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const user = useServerUser();
-  if (user === undefined) {
+  const { user, loading } = useAuth();
+  if (loading) {
     return <div className="min-h-screen bg-sand-50" />;
   }
   if (!user) {
@@ -51,8 +37,8 @@ export function VendorPortalGuard({ children }: { children: ReactNode }) {
 
 export function AdminPortalGuard({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const user = useServerUser();
-  if (user === undefined) {
+  const { user, loading } = useAuth();
+  if (loading) {
     return <div className="min-h-screen bg-gray-100" />;
   }
   if (!user) {

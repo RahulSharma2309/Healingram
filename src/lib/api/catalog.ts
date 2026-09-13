@@ -1,8 +1,60 @@
 import { apiFetch } from "./client";
 
-export type CatalogNeed = { slug: string; label: string };
+export type CatalogNeed = {
+  slug: string;
+  label: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  iconKey?: string | null;
+  sortOrder?: number;
+  kind?: string;
+};
+
+export type DiscoveryCard = {
+  slug: string;
+  surface: string;
+  label: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  iconKey?: string | null;
+  href?: string | null;
+  sortOrder: number;
+};
+
+export type CatalogTheme = { slug: string; label: string; sortOrder: number };
+
+export type PriceQuote = {
+  quoteId: string;
+  retreatSlug: string;
+  programmeSlug: string;
+  durationNights: number;
+  occupancy: string;
+  guests: number;
+  currency: string;
+  baseAmount?: number | null;
+  taxAmount?: number | null;
+  totalAmount?: number | null;
+  priceStatus: string;
+  pricingVersion: string;
+  nights: number;
+};
+
+export type ContentPage = {
+  slug: string;
+  title: string;
+  body: string;
+  kind: string;
+  sortOrder: number;
+};
 export type CatalogCity = { slug: string; label: string; count: number };
-export type CatalogState = { slug: string; label: string; cities: CatalogCity[] };
+export type CatalogState = {
+  slug: string;
+  label: string;
+  cities: CatalogCity[];
+  description?: string | null;
+  imageUrl?: string | null;
+  sortOrder?: number;
+};
 export type RetreatCard = {
   slug: string;
   name: string;
@@ -57,17 +109,22 @@ export type ListingProgramme = {
   supportedDurations: number[];
   priceStatus: string;
   priceFromInr?: number | null;
-  inclusions?: ListingInclusion[] | null;
+  inclusions?: ListingInclusion[];
+  description?: string | null;
+  bestFor?: string | null;
 };
 
 export type ListingRoom = {
   name: string;
   occupancyMax: number;
+  description?: string | null;
 };
 
 export type ListingExpert = {
   name: string;
   role?: string | null;
+  bio?: string | null;
+  imageUrl?: string | null;
 };
 
 export type ListingTestimonial = {
@@ -89,13 +146,53 @@ export type RetreatListing = {
   priceStatus: string;
   programmeThemes?: string[];
   programmes: ListingProgramme[];
-  durations?: number[] | null;
-  rooms?: ListingRoom[] | null;
-  inclusions?: ListingInclusion[] | null;
-  experts?: ListingExpert[] | null;
-  testimonials?: ListingTestimonial[] | null;
+  durations?: number[];
+  rooms?: ListingRoom[];
+  inclusions?: ListingInclusion[];
+  experts?: ListingExpert[];
+  testimonials?: ListingTestimonial[];
+  media?: { url: string; alt?: string | null; category: string; sortOrder: number }[];
+  sections?: { kind: string; payload: unknown }[];
 };
 
 export async function fetchRetreatListing(slug: string): Promise<RetreatListing> {
   return apiFetch<RetreatListing>(`/api/catalog/retreats/${encodeURIComponent(slug)}`);
+}
+
+export async function fetchDiscovery(): Promise<DiscoveryCard[]> {
+  const data = await apiFetch<{ items: DiscoveryCard[] }>("/api/catalog/discovery");
+  return data.items ?? [];
+}
+
+export async function fetchThemes(): Promise<CatalogTheme[]> {
+  const data = await apiFetch<{ items: CatalogTheme[] }>("/api/catalog/themes");
+  return data.items ?? [];
+}
+
+export async function quoteProgrammePrice(input: {
+  retreatSlug: string;
+  programmeSlug: string;
+  durationNights: number;
+  occupancy: string;
+  guests: number;
+}): Promise<PriceQuote> {
+  return apiFetch<PriceQuote>("/api/catalog/pricing/quote", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchContentPages(kind?: string): Promise<ContentPage[]> {
+  const qs = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+  const data = await apiFetch<{ items: ContentPage[] }>(`/api/content/pages${qs}`);
+  return data.items ?? [];
+}
+
+export async function fetchContentPage(slug: string): Promise<ContentPage> {
+  return apiFetch<ContentPage>(`/api/content/pages/${encodeURIComponent(slug)}`);
+}
+
+export async function fetchPlatformSettings(): Promise<Record<string, string>> {
+  const data = await apiFetch<{ items: Record<string, string> }>("/api/platform/settings");
+  return data.items ?? {};
 }

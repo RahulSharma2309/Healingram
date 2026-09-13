@@ -26,7 +26,7 @@ If the API fails, the UI **shows an error**. It must not invent a local-only boo
 | POST | `/api/auth/register` | no | Same email/phone as a guest **promotes** that row (`account_status=registered`) |
 | POST | `/api/payment/intents` | Bearer, registered only | Guest JWT is 403 |
 
-Body: `idempotencyKey`, `retreatSlug`, `programmeSlug`, `durationNights`, `occupancy`, `guests`, `checkIn`, `customerName`, `email`, `phone`.
+Body: `idempotencyKey`, `retreatSlug`, `programmeSlug`, `durationNights`, `occupancy`, `guests`, `checkIn`, `customerName`, `email`, `phone`, optional `quoteId`. The server re-quotes or loads that snapshot; the browser amount is not authoritative.
 
 `201` → `{ publicId: "HR-2026-#####", status: "REQUESTED", snapshot }`.  
 Same key + same fingerprint → replay. Same key + different body → `409`.

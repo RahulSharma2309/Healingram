@@ -20,6 +20,7 @@ public sealed class MatchingModule : IAppModule
     public void Register(IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<IMatchSessionStore, PostgresMatchSessionStore>();
+        services.AddScoped<IMatchOptionStore, PostgresMatchOptionStore>();
         services.AddScoped<MatchingService>();
     }
 
@@ -27,6 +28,29 @@ public sealed class MatchingModule : IAppModule
     {
         var group = app.MapGroup("/api/matching").WithTags("Matching");
         group.MapGet("/ready", () => Results.Ok(new { module = Name }));
+        group.MapGet("/options", async (MatchingService matching, CancellationToken cancellationToken) =>
+        {
+            var set = await matching.GetOptionsAsync(cancellationToken);
+            return Results.Ok(new
+            {
+                questions = set.Questions.Select(q => new
+                {
+                    key = q.Key,
+                    label = q.Label,
+                    selectionMode = q.SelectionMode,
+                    sortOrder = q.SortOrder,
+                    options = q.Options.Select(o => new
+                    {
+                        key = o.Key,
+                        label = o.Label,
+                        description = o.Description,
+                        iconKey = o.IconKey,
+                        sortOrder = o.SortOrder,
+                        themeSlugs = o.ThemeSlugs
+                    })
+                })
+            });
+        });
         group.MapPost("/sessions", async (
             CreateMatchSessionRequest? body,
             MatchingService matching,

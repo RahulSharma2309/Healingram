@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Healingram.Contracts.Identity;
+using Microsoft.Extensions.Configuration;
 using Healingram.Modules.Leads.Application;
 using Healingram.Modules.Leads.Domain;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Healingram.Modules.Leads;
@@ -15,6 +17,36 @@ internal static class LeadsEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         var leads = app.MapGroup("/api/leads").WithTags("Leads");
+
+        leads.MapGet("/options", async ([FromServices] IConfiguration configuration, CancellationToken cancellationToken) =>
+        {
+            await using var connection = new Npgsql.NpgsqlConnection(
+                configuration.GetConnectionString("Postgres")
+                ?? throw new InvalidOperationException("ConnectionStrings:Postgres is required."));
+            await connection.OpenAsync(cancellationToken);
+            await using var command = new Npgsql.NpgsqlCommand(
+                """
+                SELECT kind, option_key, label, sort_order
+                FROM leads.options
+                WHERE active = TRUE
+                ORDER BY kind, sort_order, label
+                """,
+                connection);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var items = new List<object>();
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                items.Add(new
+                {
+                    kind = reader.GetString(0),
+                    key = reader.GetString(1),
+                    label = reader.GetString(2),
+                    sortOrder = reader.GetInt32(3)
+                });
+            }
+
+            return Results.Ok(new { items });
+        });
 
         leads.MapPost("/", (
             CreateLeadRequest? body,

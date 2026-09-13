@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { LaunchProgrammeTheme, LaunchRetreat } from "../../data/launchSupply";
+import type { LaunchProgrammeTheme, LaunchRetreat } from "../catalogTypes";
+import type { NeedThemeMap } from "../browse";
 import {
   fetchNeeds,
   fetchPlaces,
@@ -8,9 +9,7 @@ import {
   type CatalogState,
   type RetreatCard,
 } from "./catalog";
-
-const FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&q=80";
+import { fetchMatchOptions } from "./matching";
 
 export type CatalogLoadSource = "loading" | "api" | "error";
 
@@ -22,7 +21,7 @@ export function retreatCardToLaunch(card: RetreatCard): LaunchRetreat {
     stateLabel: card.stateLabel,
     locality: card.locality,
     programmes: (card.programmeThemes ?? []) as LaunchProgrammeTheme[],
-    image: card.imageUrl || FALLBACK_IMAGE,
+    image: card.imageUrl?.trim() || "",
     typicalDuration: card.typicalDuration ?? undefined,
     priceFrom: card.priceFromInr ?? null,
     mvpDemoVerified: card.priceStatus === "VERIFIED",
@@ -33,27 +32,36 @@ export function usePublishedRetreats() {
   const [retreats, setRetreats] = useState<LaunchRetreat[]>([]);
   const [places, setPlaces] = useState<CatalogState[]>([]);
   const [needs, setNeeds] = useState<CatalogNeed[]>([]);
+  const [needThemeMap, setNeedThemeMap] = useState<NeedThemeMap>({});
   const [source, setSource] = useState<CatalogLoadSource>("loading");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [items, apiPlaces, apiNeeds] = await Promise.all([
+        const [items, apiPlaces, apiNeeds, questions] = await Promise.all([
           fetchRetreats({}),
           fetchPlaces(),
           fetchNeeds(),
+          fetchMatchOptions().catch(() => []),
         ]);
         if (cancelled) return;
         setRetreats(items.map(retreatCardToLaunch));
         setPlaces(apiPlaces);
         setNeeds(apiNeeds);
+        const q1 = questions.find((q) => q.key === "q1");
+        const map: NeedThemeMap = {};
+        for (const option of q1?.options ?? []) {
+          map[option.key] = option.themeSlugs ?? [];
+        }
+        setNeedThemeMap(map);
         setSource("api");
       } catch {
         if (!cancelled) {
           setRetreats([]);
           setPlaces([]);
           setNeeds([]);
+          setNeedThemeMap({});
           setSource("error");
         }
       }
@@ -65,5 +73,5 @@ export function usePublishedRetreats() {
 
   const byId = useMemo(() => new Map(retreats.map((r) => [r.id, r])), [retreats]);
 
-  return { retreats, places, needs, source, byId };
+  return { retreats, places, needs, needThemeMap, source, byId };
 }

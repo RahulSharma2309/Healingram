@@ -18,8 +18,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { getUserName, isLoggedIn, logOut } from "../lib/auth";
-import { buildDestinationsMenuFromPlaces, getHeaderItem, type NavLinkItem } from "../navigation/headerConfig";
+import { useAuth } from "../lib/auth/AuthProvider";
+import { fetchThemes } from "../lib/api/catalog";
+import {
+  buildDestinationsMenuFromPlaces,
+  buildRetreatTypesMenu,
+  getHeaderItem,
+  type NavLinkItem,
+} from "../navigation/headerConfig";
 import { usePublishedRetreats } from "../lib/api/usePublishedRetreats";
 import healingramMark from "../assets/healingram-mark.png";
 
@@ -57,24 +63,12 @@ function groupNavItems(items: NavLinkItem[]): { group?: string; items: NavLinkIt
 }
 
 function useAuthState() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [userName, setUserName] = useState("Guest");
-
-  const refresh = useCallback(() => {
-    setLoggedIn(isLoggedIn());
-    setUserName(getUserName());
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    window.addEventListener("healingram-auth", refresh);
-    window.addEventListener("storage", refresh);
-    return () => {
-      window.removeEventListener("healingram-auth", refresh);
-      window.removeEventListener("storage", refresh);
-    };
-  }, [refresh]);
-
+  const { user, authenticated } = useAuth();
+  const loggedIn =
+    authenticated &&
+    user?.accountStatus !== "guest" &&
+    user?.authKind !== "guest_request";
+  const userName = user?.fullName?.trim() || user?.email || "Guest";
   return { loggedIn, userName };
 }
 
@@ -326,6 +320,7 @@ function AccountDropdown({
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const closeTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -396,7 +391,7 @@ function AccountDropdown({
               role="menuitem"
               className="w-full text-left px-4 py-2.5 text-sm text-sage-800 hover:bg-sand-50 border-t border-sand-100"
               onClick={() => {
-                logOut();
+                void logout();
                 onClose();
                 navigate("/");
               }}
@@ -414,9 +409,11 @@ type OpenMenu = "types" | "destinations" | "account" | null;
 
 export function CustomerHeader() {
   const { loggedIn, userName } = useAuthState();
+  const { logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [mobileSection, setMobileSection] = useState<OpenMenu>(null);
+  const [typeItems, setTypeItems] = useState<NavLinkItem[]>([]);
   const navigate = useNavigate();
 
   const item1 = getHeaderItem(1);
@@ -429,9 +426,21 @@ export function CustomerHeader() {
   const item9 = getHeaderItem(9);
 
   const { places } = usePublishedRetreats();
-  const typeItems = item3.getMenuItems?.() ?? [];
-  const destinationItems =
-    places.length > 0 ? buildDestinationsMenuFromPlaces(places) : (item4.getMenuItems?.() ?? []);
+  const destinationItems = buildDestinationsMenuFromPlaces(places);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchThemes()
+      .then((themes) => {
+        if (!cancelled) setTypeItems(buildRetreatTypesMenu(themes));
+      })
+      .catch(() => {
+        if (!cancelled) setTypeItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const closeAll = useCallback(() => {
     setOpenMenu(null);
@@ -710,7 +719,7 @@ export function CustomerHeader() {
                 type="button"
                 className="w-full text-left py-3 text-sm font-medium text-sage-800 border-b border-sand-100"
                 onClick={() => {
-                  logOut();
+                  void logout();
                   closeMobile();
                   navigate("/");
                 }}

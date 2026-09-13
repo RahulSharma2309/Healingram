@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AuthProvider } from "./lib/auth/AuthProvider";
 import { CustomerLayout } from "./layouts/CustomerLayout";
 import { VendorLayout } from "./layouts/VendorLayout";
 import { AdminLayout } from "./layouts/AdminLayout";
@@ -8,7 +9,6 @@ import { SearchResults } from "./pages/customer/SearchResults";
 import { RetreatDetail } from "./pages/customer/RetreatDetail";
 import { Questionnaire } from "./pages/customer/Questionnaire";
 import { Checkout } from "./pages/customer/Checkout";
-import { PaymentSuccess } from "./pages/customer/PaymentSuccess";
 import { BookingConfirmation } from "./pages/customer/BookingConfirmation";
 import { Login } from "./pages/customer/Login";
 import { Signup } from "./pages/customer/Signup";
@@ -120,7 +120,7 @@ function PortalApp() {
           <Route path="destinations" element={<Destinations />} />
           <Route path="questionnaire" element={<Questionnaire />} />
           <Route path="blog" element={<Blog />} />
-          <Route path="about" element={<StaticPage title="About Us" />} />
+          <Route path="about" element={<StaticPage title="About Us" slug="about" />} />
           <Route path="contact" element={<TalkToExpert />} />
           <Route path="terms" element={<StaticPage title="Terms" />} />
           <Route path="privacy" element={<StaticPage title="Privacy" />} />
@@ -134,7 +134,7 @@ function PortalApp() {
           <Route path="requests/:requestId/payment" element={<PaymentReady />} />
           <Route path="requests/:requestId" element={<MyAvailabilityRequest />} />
           <Route path="checkout/:id" element={<Checkout />} />
-          <Route path="payment-success" element={<PaymentSuccess />} />
+          <Route path="payment-success" element={<Navigate to="/" replace />} />
           <Route path="booking-confirmation" element={<BookingConfirmation />} />
         </Route>
         <Route path="vendor/login" element={<VendorLogin />} />
@@ -169,7 +169,9 @@ function PortalApp() {
 export default function App() {
   return (
     <BrowserRouter>
-      <PortalApp />
+      <AuthProvider>
+        <PortalApp />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

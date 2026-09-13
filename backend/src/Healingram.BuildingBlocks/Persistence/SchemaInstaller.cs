@@ -87,6 +87,7 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
     internal static IReadOnlyList<string> LegacyIdsToRecord(
         IReadOnlyList<string> sqlFiles,
         bool hasExistingSchema,
+        bool hasFoundationTables,
         bool hasHardeningColumns)
     {
         if (!hasExistingSchema)
@@ -103,7 +104,9 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
                 continue;
             }
 
-            if (version < 11 || (version == 11 && hasHardeningColumns))
+            if (version < 10
+                || (version == 10 && hasFoundationTables)
+                || (version == 11 && hasHardeningColumns))
             {
                 recorded.Add(id);
             }
@@ -148,6 +151,10 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
             connection,
             "SELECT to_regclass('availability.requests') IS NOT NULL",
             cancellationToken);
+        var hasFoundationTables = await ScalarTrueAsync(
+            connection,
+            "SELECT to_regclass('identity.admin_permissions') IS NOT NULL",
+            cancellationToken);
         var hasHardeningColumns = await ScalarTrueAsync(
             connection,
             """
@@ -159,7 +166,7 @@ public sealed class SchemaInstaller(IConfiguration configuration, ILogger<Schema
                   AND column_name = 'processing_status')
             """,
             cancellationToken);
-        return LegacyIdsToRecord(sqlFiles, hasExistingSchema, hasHardeningColumns);
+        return LegacyIdsToRecord(sqlFiles, hasExistingSchema, hasFoundationTables, hasHardeningColumns);
     }
 
     private static async Task<bool> ScalarTrueAsync(

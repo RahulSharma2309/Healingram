@@ -6,12 +6,13 @@ import {
   listAvailabilityRequests,
   listCustomerTrips,
   mergeServerAvailability,
+  refreshMyRequests,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
-import { formatInr } from "../../data/programmePricing";
+import { formatInr } from "../../lib/money";
 import { usePublishedRetreats } from "../../lib/api/usePublishedRetreats";
-import { getCustomerProfile, isLoggedIn } from "../../lib/auth";
+import { isLoggedIn } from "../../lib/auth";
 import { ProfileDetails } from "./ProfileDetails";
 import { hydrateWishlistFromServer, listWishlistSlugs, subscribeWishlist, toggleWishlist } from "../../lib/wishlist";
 
@@ -38,19 +39,8 @@ export function UserDashboard() {
 
   useEffect(() => {
     const refresh = () => {
-      const all = listAvailabilityRequests();
-      const profile = getCustomerProfile();
-      const mine = all.filter(
-        (r) =>
-          (profile.email && r.customerEmail.toLowerCase() === profile.email.toLowerCase()) ||
-          r.customerName === profile.name,
-      );
-      setRequests(mine);
-      setTrips(
-        listCustomerTrips().filter((r) =>
-          mine.some((m) => m.requestId === r.requestId),
-        ),
-      );
+      setRequests(listAvailabilityRequests());
+      setTrips(listCustomerTrips());
       setWishSlugs(listWishlistSlugs());
     };
     refresh();
@@ -60,6 +50,7 @@ export function UserDashboard() {
       };
     }
     void hydrateWishlistFromServer().then(() => setWishSlugs(listWishlistSlugs()));
+    void refreshMyRequests().then(refresh).catch(() => undefined);
     void fetchTrips()
       .then((groups) => {
         const cards = [

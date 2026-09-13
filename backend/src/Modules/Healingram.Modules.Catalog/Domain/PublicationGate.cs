@@ -11,7 +11,10 @@ public enum RetreatPublicationStatus
 {
     Draft = 0,
     Active = 1,
-    Archived = 2
+    Archived = 2,
+    PendingReview = 3,
+    Approved = 4,
+    Suspended = 5
 }
 
 public sealed record PublicationInput(

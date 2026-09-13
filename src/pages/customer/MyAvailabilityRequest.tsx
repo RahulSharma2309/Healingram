@@ -5,14 +5,12 @@ import { getAvailabilityByPublicId } from "../../lib/api/availability";
 import { isRegisteredAccount } from "../../lib/auth";
 import {
   customerAcceptAlternative,
-  customerDeclineAlternative,
-  customerRequestAnotherOption,
   getAvailabilityRequest,
   mergeServerAvailability,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
-import { formatInr } from "../../data/programmePricing";
+import { formatInr } from "../../lib/money";
 
 export function MyAvailabilityRequest() {
   const { requestId } = useParams();
@@ -163,26 +161,12 @@ export function MyAvailabilityRequest() {
             >
               Accept this option
             </button>
-            <button
-              type="button"
-              className="rounded-xl border border-sand-200 px-5 py-3 text-sm font-semibold"
-              onClick={() => {
-                customerRequestAnotherOption(request.requestId);
-                refresh();
-              }}
+            <Link
+              to="/contact"
+              className="rounded-xl border border-sand-200 px-5 py-3 text-sm font-semibold text-center"
             >
-              Request another option
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-sand-200 px-5 py-3 text-sm font-semibold text-sage-600"
-              onClick={() => {
-                customerDeclineAlternative(request.requestId);
-                refresh();
-              }}
-            >
-              Decline
-            </button>
+              Talk to an Expert
+            </Link>
           </div>
         </>
       )}

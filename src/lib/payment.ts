@@ -1,10 +1,3 @@
-/**
- * Payment display helpers. The browser never marks a booking paid.
- * Server PaymentService + IPaymentProvider is the source of truth.
- * localStorage caches checkout UX only.
- */
-
-import type { SettlementMode } from "../data/programmePricing";
 import { ApiError, apiErrorMessage } from "./api/client";
 import {
   getPaymentIntentById,
@@ -12,36 +5,18 @@ import {
   postPaymentIntent,
   type ServerPaymentIntent,
 } from "./api/payment";
-import { getAvailabilityRequest } from "./availabilityRequests";
+import { loadAvailabilityRequest } from "./availabilityRequests";
 
 export type PaymentIntent = {
   requestId: string;
   serverIntentId?: string;
   amount: number;
   currency: "INR";
-  settlementMode: SettlementMode;
+  settlementMode: "MARKETPLACE_SPLIT" | "PARTNER_DIRECT";
   status: "created" | "awaiting_provider" | "cancelled" | "ready";
   provider: "fake" | "placeholder";
   createdAt: string;
 };
-
-const INTENT_KEY = "healingram_payment_intents_v1";
-
-function readIntents(): PaymentIntent[] {
-  try {
-    return JSON.parse(localStorage.getItem(INTENT_KEY) || "[]") as PaymentIntent[];
-  } catch {
-    return [];
-  }
-}
-
-function writeIntents(intents: PaymentIntent[]): void {
-  try {
-    localStorage.setItem(INTENT_KEY, JSON.stringify(intents));
-  } catch {
-    /* ignore */
-  }
-}
 
 function sessionGet(key: string): string | null {
   try {
@@ -76,48 +51,37 @@ function rememberIntentId(publicId: string, intentId: string): void {
   sessionSet(`healingram_pay_intent_${publicId}`, intentId);
 }
 
-function persistLocalIntent(intent: PaymentIntent): void {
-  const all = readIntents().filter((i) => i.requestId !== intent.requestId);
-  all.unshift(intent);
-  writeIntents(all);
+export function paymentFailureMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409) {
+    return "This request is no longer available for payment.";
+  }
+  if (error instanceof ApiError) {
+    return apiErrorMessage(error);
+  }
+  return "Could not create a payment intent on the server.";
 }
 
 export async function createPaymentIntent(
   requestId: string,
 ): Promise<PaymentIntent | { error: string }> {
-  const request = getAvailabilityRequest(requestId);
   try {
     const server = await postPaymentIntent(requestId, idempotencyKeyFor(requestId));
     rememberIntentId(requestId, server.id);
-    const intent: PaymentIntent = {
+    return {
       requestId,
       serverIntentId: server.id,
-      amount: request?.finalPayableAmount ?? 0,
+      amount: 0,
       currency: "INR",
-      settlementMode: request?.settlementMode ?? "MARKETPLACE_SPLIT",
+      settlementMode: "MARKETPLACE_SPLIT",
       status: "ready",
       provider: "fake",
       createdAt: new Date().toISOString(),
     };
-    persistLocalIntent(intent);
-    return intent;
   } catch (error) {
-    return {
-      error:
-        error instanceof ApiError
-          ? apiErrorMessage(error)
-          : "Could not create a payment intent on the server. Confirm availability as a partner first, then try again. No payment was taken.",
-    };
+    return { error: paymentFailureMessage(error) };
   }
 }
 
-export function getPaymentIntent(requestId: string): PaymentIntent | undefined {
-  return readIntents().find((i) => i.requestId === requestId);
-}
-
-/**
- * Opens payment-ready handoff only. Does not mark the request paid.
- */
 export async function startPlaceholderCheckout(requestId: string): Promise<{
   ok: boolean;
   message: string;
@@ -125,40 +89,21 @@ export async function startPlaceholderCheckout(requestId: string): Promise<{
 }> {
   const intent = await createPaymentIntent(requestId);
   if ("error" in intent) return { ok: false, message: intent.error };
-
-  if (intent.settlementMode === "PARTNER_DIRECT") {
-    return {
-      ok: true,
-      intentId: intent.serverIntentId,
-      message:
-        "Partner-direct settlement is configured. The retreat will complete payment separately. No payment was taken here, and this page did not mark the booking paid.",
-    };
-  }
-
   return {
     ok: true,
     intentId: intent.serverIntentId,
     message:
-      "Payment intent is ready on the server. Status stays payment-pending until a verified webhook confirms it. This page does not mark the booking paid.",
+      "Payment intent is ready on the server. Status stays payment-pending until a verified webhook confirms it.",
   };
 }
 
-/**
- * Local admin stand-in for the fake provider. Calls the server webhook.
- * Does not mark paid unless the server returns status paid.
- */
 export async function simulateVerifiedPaymentWebhook(requestId: string): Promise<{
   ok: boolean;
   message: string;
 }> {
-  const request = getAvailabilityRequest(requestId);
-  if (!request) return { ok: false, message: "Request not found" };
-  if (request.finalPayableAmount == null) {
-    return { ok: false, message: "No final amount" };
-  }
-
-  let intentId = rememberedIntentId(requestId);
   try {
+    const request = await loadAvailabilityRequest(requestId);
+    let intentId = rememberedIntentId(requestId);
     if (!intentId) {
       const created = await postPaymentIntent(requestId, idempotencyKeyFor(requestId));
       intentId = created.id;
@@ -168,21 +113,16 @@ export async function simulateVerifiedPaymentWebhook(requestId: string): Promise
     const paid = await postAdminSimulatePayment(
       intentId,
       `demo_wh_${crypto.randomUUID()}`,
-      request.finalPayableAmount,
+      request.finalPayableAmount ?? 0,
     );
     if (paid.status !== "paid" && paid.status !== "succeeded") {
       return { ok: false, message: "Server did not mark this intent paid." };
     }
-
-    return {
-      ok: true,
-      message: `Verified webhook applied. Intent ${paid.id} is paid.`,
-    };
-  } catch {
+    return { ok: true, message: `Verified webhook applied. Intent ${paid.id} is paid.` };
+  } catch (error) {
     return {
       ok: false,
-      message:
-        "Webhook was not accepted by the server. Sign in as admin/partner if needed, confirm availability on the API, then try again. The browser did not mark this paid.",
+      message: error instanceof ApiError ? apiErrorMessage(error) : "Webhook was not accepted by the server.",
     };
   }
 }

@@ -1,4 +1,5 @@
-import { mergeWishlistOnLogin } from "../wishlist";
+import { applyAuthUser } from "../auth";
+import { hydrateWishlistFromServer } from "../wishlist";
 import { ApiError, apiErrorMessage, apiFetch, getRefreshToken, setAccessToken, setRefreshToken } from "./client";
 
 export type PartnerMembership = {
@@ -21,6 +22,7 @@ export type AuthUser = {
   phoneCountryCode?: string | null;
   accountStatus?: string | null;
   partnerMemberships?: PartnerMembership[];
+  authKind?: string | null;
 };
 
 export function userHasRole(user: Pick<AuthUser, "role" | "roles">, role: string): boolean {
@@ -67,7 +69,11 @@ export async function loginWithPassword(
 
 export async function persistAuthenticatedSession(tokens: TokenResponse): Promise<void> {
   persistSession(tokens);
-  await mergeWishlistOnLogin();
+  applyAuthUser(tokens.user);
+  if (tokens.user.accountStatus !== "guest") {
+    await hydrateWishlistFromServer();
+  }
+  window.dispatchEvent(new Event("healingram-auth"));
 }
 
 export async function registerAccount(input: {
@@ -84,7 +90,8 @@ export async function registerAccount(input: {
     body: JSON.stringify(input),
   });
   persistSession(tokens);
-  await mergeWishlistOnLogin();
+  applyAuthUser(tokens.user);
+  await hydrateWishlistFromServer();
   return tokens;
 }
 
@@ -117,8 +124,9 @@ export async function verifyGuestRequest(input: {
   }
 
   persistSession(result);
+  applyAuthUser(result.user);
   if (result.user.accountStatus !== "guest") {
-    await mergeWishlistOnLogin();
+    await hydrateWishlistFromServer();
   }
   return result;
 }

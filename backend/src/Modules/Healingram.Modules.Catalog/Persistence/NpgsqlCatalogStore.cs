@@ -163,6 +163,212 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
         await tx.CommitAsync(cancellationToken);
     }
 
+    public async Task SeedPresentationAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await CatalogPresentationSeed.ApplyAsync(connection, tx, cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<NeedRecord>> ListNeedRecordsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT slug, label, description, image_url, icon_key, sort_order, kind, active
+            FROM catalog.needs
+            ORDER BY sort_order, label
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<NeedRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new NeedRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.GetInt32(5),
+                reader.GetString(6),
+                reader.GetBoolean(7)));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<DiscoveryCardRecord>> ListDiscoveryCardsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT slug, surface, label, description, image_url, icon_key, href, sort_order
+            FROM catalog.discovery_cards
+            WHERE active = TRUE
+            ORDER BY surface, sort_order, label
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<DiscoveryCardRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new DiscoveryCardRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.GetInt32(7)));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<ThemeRecord>> ListThemesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            "SELECT slug, label, sort_order FROM catalog.themes ORDER BY sort_order, label",
+            connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<ThemeRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new ThemeRecord(reader.GetString(0), reader.GetString(1), reader.GetInt32(2)));
+        }
+
+        return items;
+    }
+
+    public async Task<IReadOnlyList<DestinationRecord>> ListDestinationRecordsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT slug, kind, parent_slug, label, description, image_url, sort_order
+            FROM catalog.destinations
+            ORDER BY sort_order, label
+            """,
+            connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<DestinationRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new DestinationRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.GetInt32(6)));
+        }
+
+        return items;
+    }
+
+    public async Task<CatalogQuoteRecord> SaveQuoteAsync(CatalogQuoteRecord quote, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO catalog.price_quotes (
+                id, retreat_slug, programme_slug, duration_nights, occupancy, guests,
+                currency, base_amount, tax_amount, total_amount, price_status, pricing_version, snapshot)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+            """,
+            connection);
+        command.Parameters.AddWithValue(quote.Id);
+        command.Parameters.AddWithValue(quote.RetreatSlug);
+        command.Parameters.AddWithValue(quote.ProgrammeSlug);
+        command.Parameters.AddWithValue(quote.DurationNights);
+        command.Parameters.AddWithValue(quote.Occupancy);
+        command.Parameters.AddWithValue(quote.Guests);
+        command.Parameters.AddWithValue(quote.Currency);
+        command.Parameters.Add(Typed(quote.BaseAmount, NpgsqlDbType.Numeric));
+        command.Parameters.Add(Typed(quote.TaxAmount, NpgsqlDbType.Numeric));
+        command.Parameters.Add(Typed(quote.TotalAmount, NpgsqlDbType.Numeric));
+        command.Parameters.AddWithValue(quote.PriceStatus);
+        command.Parameters.AddWithValue(quote.PricingVersion);
+        command.Parameters.AddWithValue(quote.SnapshotJson);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        return quote;
+    }
+
+    public async Task<CatalogQuoteRecord?> GetQuoteAsync(Guid id, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT id, retreat_slug, programme_slug, duration_nights, occupancy, guests,
+                   currency, base_amount, tax_amount, total_amount, price_status, pricing_version, snapshot::text
+            FROM catalog.price_quotes
+            WHERE id = $1
+            """,
+            connection);
+        command.Parameters.AddWithValue(id);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new CatalogQuoteRecord(
+            reader.GetGuid(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetInt32(3),
+            reader.GetString(4),
+            reader.GetInt32(5),
+            reader.GetString(6),
+            reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+            reader.IsDBNull(8) ? null : reader.GetDecimal(8),
+            reader.IsDBNull(9) ? null : reader.GetDecimal(9),
+            reader.GetString(10),
+            reader.GetString(11),
+            reader.GetString(12));
+    }
+
+    public async Task<IReadOnlyList<ContentPageRecord>> ListPublishedContentAsync(string? kind, CancellationToken cancellationToken)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT slug, title, body, status, kind, sort_order, published_at
+            FROM content.pages
+            WHERE status = 'published'
+              AND ($1::text IS NULL OR kind = $1)
+            ORDER BY sort_order, title
+            """,
+            connection);
+        command.Parameters.Add(Typed(kind, NpgsqlDbType.Text));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var items = new List<ContentPageRecord>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new ContentPageRecord(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                reader.GetString(3),
+                reader.GetString(4),
+                reader.GetInt32(5),
+                reader.IsDBNull(6) ? null : reader.GetFieldValue<DateTimeOffset>(6)));
+        }
+
+        return items;
+    }
+
+    public async Task<ContentPageRecord?> GetPublishedContentAsync(string slug, CancellationToken cancellationToken)
+    {
+        var pages = await ListPublishedContentAsync(null, cancellationToken);
+        return pages.FirstOrDefault(p => p.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+    }
+
     private async Task<NpgsqlConnection> OpenAsync(CancellationToken cancellationToken)
     {
         var connectionString = configuration.GetConnectionString("Postgres")
@@ -211,7 +417,7 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
         var programmesByRetreat = new Dictionary<Guid, List<Guid>>();
         await using (var command = new NpgsqlCommand(
             """
-            SELECT id, retreat_id, slug, name, supported_durations, need_slug, theme_slug
+            SELECT id, retreat_id, slug, name, supported_durations, need_slug, theme_slug, description, best_for
             FROM catalog.programmes
             """,
             connection))
@@ -232,7 +438,16 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
                     ? []
                     : reader.GetFieldValue<int[]>(4);
 
-                programmes[id] = new ProgrammeRow(id, retreatId, slug, reader.GetString(3), need, theme, durations);
+                programmes[id] = new ProgrammeRow(
+                    id,
+                    retreatId,
+                    slug,
+                    reader.GetString(3),
+                    need,
+                    theme,
+                    durations,
+                    reader.FieldCount > 7 && !reader.IsDBNull(7) ? reader.GetString(7) : null,
+                    reader.FieldCount > 8 && !reader.IsDBNull(8) ? reader.GetString(8) : null);
                 if (!programmesByRetreat.TryGetValue(retreatId, out var list))
                 {
                     list = [];
@@ -295,7 +510,7 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
 
         var roomsByRetreat = new Dictionary<Guid, List<RoomSnapshot>>();
         await using (var command = new NpgsqlCommand(
-            "SELECT retreat_id, name, occupancy_max FROM catalog.rooms",
+            "SELECT retreat_id, name, occupancy_max, description FROM catalog.rooms",
             connection))
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
@@ -308,13 +523,18 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
                     roomsByRetreat[retreatId] = list;
                 }
 
-                list.Add(new RoomSnapshot { Name = reader.GetString(1), OccupancyMax = reader.GetInt32(2) });
+                list.Add(new RoomSnapshot
+                {
+                    Name = reader.GetString(1),
+                    OccupancyMax = reader.GetInt32(2),
+                    Description = reader.FieldCount > 3 && !reader.IsDBNull(3) ? reader.GetString(3) : null
+                });
             }
         }
 
         var expertsByRetreat = new Dictionary<Guid, List<ExpertSnapshot>>();
         await using (var command = new NpgsqlCommand(
-            "SELECT retreat_id, name, verified, role FROM catalog.experts",
+            "SELECT retreat_id, name, verified, role, bio, image_url FROM catalog.experts",
             connection))
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
@@ -331,7 +551,9 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
                 {
                     Name = reader.GetString(1),
                     Verified = reader.GetBoolean(2),
-                    Role = reader.IsDBNull(3) ? null : reader.GetString(3)
+                    Role = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    Bio = reader.FieldCount > 4 && !reader.IsDBNull(4) ? reader.GetString(4) : null,
+                    ImageUrl = reader.FieldCount > 5 && !reader.IsDBNull(5) ? reader.GetString(5) : null
                 });
             }
         }
@@ -361,6 +583,54 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
             }
         }
 
+        var mediaByRetreat = new Dictionary<Guid, List<MediaSnapshot>>();
+        await using (var command = new NpgsqlCommand(
+            "SELECT retreat_id, url, alt, category, sort_order FROM catalog.retreat_media ORDER BY sort_order",
+            connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var retreatId = reader.GetGuid(0);
+                if (!mediaByRetreat.TryGetValue(retreatId, out var list))
+                {
+                    list = [];
+                    mediaByRetreat[retreatId] = list;
+                }
+
+                list.Add(new MediaSnapshot
+                {
+                    Url = reader.GetString(1),
+                    Alt = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    Category = reader.GetString(3),
+                    SortOrder = reader.GetInt32(4)
+                });
+            }
+        }
+
+        var sectionsByRetreat = new Dictionary<Guid, List<SectionSnapshot>>();
+        await using (var command = new NpgsqlCommand(
+            "SELECT retreat_id, kind, payload::text FROM catalog.retreat_sections",
+            connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var retreatId = reader.GetGuid(0);
+                if (!sectionsByRetreat.TryGetValue(retreatId, out var list))
+                {
+                    list = [];
+                    sectionsByRetreat[retreatId] = list;
+                }
+
+                list.Add(new SectionSnapshot
+                {
+                    Kind = reader.GetString(1),
+                    PayloadJson = reader.GetString(2)
+                });
+            }
+        }
+
         return retreats.Values.Select(row =>
         {
             var programmeIds = programmesByRetreat.GetValueOrDefault(row.Id) ?? [];
@@ -376,6 +646,8 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
                     NeedSlug = p.NeedSlug,
                     ThemeSlug = p.ThemeSlug,
                     SupportedDurations = p.Durations,
+                    Description = p.Description,
+                    BestFor = p.BestFor,
                     Prices = pricesByProgramme.GetValueOrDefault(id) ?? [],
                     Inclusions = inclusionsByProgramme.GetValueOrDefault(id) ?? []
                 };
@@ -397,15 +669,20 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
                 Programmes = programmeSnapshots,
                 Rooms = roomsByRetreat.GetValueOrDefault(row.Id) ?? [],
                 Experts = expertsByRetreat.GetValueOrDefault(row.Id) ?? [],
-                Testimonials = testimonialsByRetreat.GetValueOrDefault(row.Id) ?? []
+                Testimonials = testimonialsByRetreat.GetValueOrDefault(row.Id) ?? [],
+                Media = mediaByRetreat.GetValueOrDefault(row.Id) ?? [],
+                Sections = sectionsByRetreat.GetValueOrDefault(row.Id) ?? []
             };
         }).ToArray();
     }
 
     private static RetreatPublicationStatus ParseStatus(string status) => status.ToLowerInvariant() switch
     {
-        "active" => RetreatPublicationStatus.Active,
+        "active" or "published" => RetreatPublicationStatus.Active,
         "archived" => RetreatPublicationStatus.Archived,
+        "pending_review" => RetreatPublicationStatus.PendingReview,
+        "approved" => RetreatPublicationStatus.Approved,
+        "suspended" => RetreatPublicationStatus.Suspended,
         _ => RetreatPublicationStatus.Draft
     };
 
@@ -432,5 +709,7 @@ internal sealed class NpgsqlCatalogStore(IConfiguration configuration) : ICatalo
         string Name,
         string NeedSlug,
         string ThemeSlug,
-        int[] Durations);
+        int[] Durations,
+        string? Description,
+        string? BestFor);
 }

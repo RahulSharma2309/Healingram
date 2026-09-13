@@ -10,7 +10,7 @@ import {
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
-import { formatInr } from "../../data/programmePricing";
+import { formatInr } from "../../lib/money";
 import { rememberedIntentId, refreshIntentStatus, startPlaceholderCheckout } from "../../lib/payment";
 
 export function PaymentReady() {
@@ -220,12 +220,9 @@ export function PaymentReady() {
       )}
 
       {intentId && (
-        <Link
-          to={`/payment-success?intent=${encodeURIComponent(intentId)}`}
-          className="mt-4 inline-block text-sm text-sage-600"
-        >
-          Return from provider (status is read-only)
-        </Link>
+        <p className="mt-4 text-sm text-sage-600">
+          Provider return is read-only. This page refreshes payment status from the server.
+        </p>
       )}
 
       <Link

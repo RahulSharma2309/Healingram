@@ -35,7 +35,7 @@ export function ProfileDetails() {
         setAddress(user.address ?? "");
       })
       .catch(() => {
-        /* keep localStorage values until the session answers */
+        /* keep in-memory session values until GET /users/me answers */
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -106,30 +106,6 @@ export type ExpertReferralContext = {
   checkOut?: string;
 };
 
-export const HELP_TYPE_OPTIONS: { id: ExpertHelpType; label: string }[] = [
-  { id: "choosing_retreat", label: "Choosing the right retreat" },
-  { id: "comparing_programmes", label: "Comparing programmes" },
-  { id: "dates_availability", label: "Dates & availability" },
-  { id: "pricing_inclusions", label: "Pricing & inclusions" },
-  { id: "something_else", label: "Something else" },
-];
-
-export const WELLNESS_NEED_OPTIONS: { id: ExpertWellnessNeed; label: string }[] = [
-  { id: "stress_burnout", label: "Stress & Burnout" },
-  { id: "ayurveda_panchakarma", label: "Ayurveda / Panchakarma" },
-  { id: "yoga_meditation", label: "Yoga & Meditation" },
-  { id: "rejuvenation_reset", label: "Rejuvenation / Reset" },
-  { id: "not_sure", label: "I’m not sure" },
-];
-
-export const TRAVEL_WINDOW_OPTIONS: { id: ExpertTravelWindow; label: string }[] = [
-  { id: "within_2_weeks", label: "Within 2 weeks" },
-  { id: "this_month", label: "This month" },
-  { id: "next_1_3_months", label: "Next 1–3 months" },
-  { id: "later", label: "Later" },
-  { id: "not_sure", label: "Not sure yet" },
-];
-
 export const EXPERT_LEAD_STATUSES: ExpertLeadStatus[] = [
   "NEW",
   "CONTACTED",
@@ -147,39 +123,18 @@ export const PHONE_COUNTRY_CODES = [
   { code: "+65", label: "Singapore (+65)", digits: 8 },
 ] as const;
 
-/** Healingram concierge WhatsApp (MVP placeholder — replace with live number) */
-export const HEALINGRAM_WHATSAPP_E164 = "919900112233";
-
-const LEADS_KEY = "healingram_expert_leads_v1";
-const SEQ_KEY = "healingram_expert_lead_seq_v1";
 const CONTEXT_KEY = "healingram_expert_context_v1";
 const EVENT = "healingram-expert-leads";
 
+let memory: ExpertLead[] = [];
+
 function readLeads(): ExpertLead[] {
-  try {
-    const raw = localStorage.getItem(LEADS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ExpertLead[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return memory;
 }
 
 function writeLeads(leads: ExpertLead[]): void {
-  localStorage.setItem(LEADS_KEY, JSON.stringify(leads));
+  memory = leads;
   window.dispatchEvent(new Event(EVENT));
-}
-
-function nextLeadId(): string {
-  let n = 1;
-  try {
-    n = Number(localStorage.getItem(SEQ_KEY) || "0") + 1;
-    localStorage.setItem(SEQ_KEY, String(n));
-  } catch {
-    n = Date.now() % 100000;
-  }
-  return `EL-${String(n).padStart(5, "0")}`;
 }
 
 export function digitsOnly(value: string): string {
@@ -227,23 +182,22 @@ export function validatePhoneNumber(
 }
 
 export function helpTypeLabel(id: ExpertHelpType): string {
-  return HELP_TYPE_OPTIONS.find((o) => o.id === id)?.label ?? id;
+  return id;
 }
 
 export function wellnessNeedLabel(id: ExpertWellnessNeed): string {
-  return WELLNESS_NEED_OPTIONS.find((o) => o.id === id)?.label ?? id;
+  return id;
 }
 
 export function travelWindowLabel(id: ExpertTravelWindow | ""): string {
-  if (!id) return "";
-  return TRAVEL_WINDOW_OPTIONS.find((o) => o.id === id)?.label ?? id;
+  return id;
 }
 
 export async function createExpertLead(input: ExpertLeadInput): Promise<ExpertLead> {
   const now = new Date().toISOString();
   const phoneNumber = digitsOnly(input.phoneNumber);
   const lead: ExpertLead = {
-    leadId: nextLeadId(),
+    leadId: "",
     fullName: input.fullName.trim(),
     phoneCountryCode: input.phoneCountryCode,
     phoneNumber,
@@ -278,9 +232,10 @@ export async function createExpertLead(input: ExpertLeadInput): Promise<ExpertLe
       whatsappConsent: lead.whatsappConsent,
       source: lead.source,
     });
-    if (server.id) lead.leadId = server.id;
-  } catch {
-    /* keep the local lead if the API is down */
+    if (!server.id) throw new Error("Lead was not stored.");
+    lead.leadId = server.id;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("Could not store that enquiry.");
   }
 
   const leads = readLeads();
@@ -394,10 +349,13 @@ export function buildWhatsAppMessage(lead: ExpertLead): string {
   return lines.join("\n");
 }
 
-export function openWhatsAppForLead(lead: ExpertLead): void {
+export async function openWhatsAppForLead(lead: ExpertLead): Promise<void> {
+  const { fetchPlatformSettings } = await import("./api/catalog");
+  const settings = await fetchPlatformSettings();
+  const number = (settings["whatsapp.number"] ?? "").replace(/\D/g, "");
+  if (!number) return;
   const text = encodeURIComponent(buildWhatsAppMessage(lead));
-  const url = `https://wa.me/${HEALINGRAM_WHATSAPP_E164}?text=${text}`;
-  window.open(url, "_blank", "noopener,noreferrer");
+  window.open(`https://wa.me/${number}?text=${text}`, "_blank", "noopener,noreferrer");
 }
 
 export function openWhatsAppCallLink(normalizedPhone: string): string {

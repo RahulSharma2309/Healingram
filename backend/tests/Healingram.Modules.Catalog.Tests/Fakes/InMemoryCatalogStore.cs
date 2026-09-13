@@ -35,4 +35,42 @@ internal sealed class InMemoryCatalogStore : ICatalogStore
 
         return Task.CompletedTask;
     }
+
+    public List<NeedRecord> Needs { get; } = [];
+    public List<DiscoveryCardRecord> Discovery { get; } = [];
+    public List<ThemeRecord> Themes { get; } = [];
+    public List<DestinationRecord> Destinations { get; } = [];
+    public List<CatalogQuoteRecord> Quotes { get; } = [];
+    public List<ContentPageRecord> Pages { get; } = [];
+
+    public Task SeedPresentationAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<NeedRecord>> ListNeedRecordsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<NeedRecord>>(Needs.ToArray());
+
+    public Task<IReadOnlyList<DiscoveryCardRecord>> ListDiscoveryCardsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<DiscoveryCardRecord>>(Discovery.ToArray());
+
+    public Task<IReadOnlyList<ThemeRecord>> ListThemesAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<ThemeRecord>>(Themes.ToArray());
+
+    public Task<IReadOnlyList<DestinationRecord>> ListDestinationRecordsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<DestinationRecord>>(Destinations.ToArray());
+
+    public Task<CatalogQuoteRecord> SaveQuoteAsync(CatalogQuoteRecord quote, CancellationToken cancellationToken)
+    {
+        Quotes.Add(quote);
+        return Task.FromResult(quote);
+    }
+
+    public Task<CatalogQuoteRecord?> GetQuoteAsync(Guid id, CancellationToken cancellationToken)
+        => Task.FromResult(Quotes.FirstOrDefault(q => q.Id == id));
+
+    public Task<IReadOnlyList<ContentPageRecord>> ListPublishedContentAsync(string? kind, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<ContentPageRecord>>(
+            Pages.Where(p => p.Status == "published" && (kind is null || p.Kind == kind)).ToArray());
+
+    public Task<ContentPageRecord?> GetPublishedContentAsync(string slug, CancellationToken cancellationToken)
+        => Task.FromResult(Pages.FirstOrDefault(p =>
+            p.Status == "published" && p.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase)));
 }
