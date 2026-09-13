@@ -4,7 +4,7 @@ Authoritative **what a person does**: `docs/po-flows/`.
 Authoritative **HTTP/table detail**: `docs/technical-flows/`.  
 This file adds the engineer map required for every major flow.
 
-Last reviewed: 13 September 2026, current implementation.
+Last reviewed against commit: `c2cbbcbc5e27a902ac40541628db2dc094cd408d`.
 
 For every flow: purpose, user, preconditions, entry, UI, APIs, authn/authz, tables, fields, transitions, success, validation, errors, notifications, audit, idempotency, security, local provider, future provider, files.
 

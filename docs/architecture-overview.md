@@ -1,6 +1,6 @@
 # Architecture overview
 
-Last reviewed: 13 September 2026, branch `feature/v1-final-foundation-release-readiness`.
+Last reviewed against commit: `c2cbbcbc5e27a902ac40541628db2dc094cd408d`.
 
 This is the canonical system picture. Journey detail lives in `docs/po-flows/` and `docs/technical-flows/`. Module detail: [architecture-modules.md](architecture-modules.md). Auth: [engineering/security-and-authorization.md](engineering/security-and-authorization.md).
 

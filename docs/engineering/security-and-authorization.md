@@ -2,7 +2,7 @@
 
 This is the authoritative V1 security model. Technical-flow pages should describe the journey and link here instead of restating auth rules.
 
-Last reviewed: 13 September 2026, branch `feature/v1-final-foundation-release-readiness`.
+Last reviewed against commit: `c2cbbcbc5e27a902ac40541628db2dc094cd408d`.
 
 ## 1. Authentication
 

@@ -9,7 +9,7 @@ Canonical code: `src/` (React frontend), `backend/` (modular monolith), PostgreS
 Written spec (binary): `Healingram_Developer_Functional_Specification_V1.docx` at the repo root.  
 Human overrides that beat that spec: inventory-driven geography, published inventory as the ceiling, local UAT first, no create-retreat CMS in V1, **webhook-only paid**.
 
-Last reviewed: 13 September 2026, branch `feature/v1-final-foundation-release-readiness`.
+Last reviewed against commit: `c2cbbcbc5e27a902ac40541628db2dc094cd408d` (13 September 2026, branch `feature/v1-final-foundation-release-readiness`).
 
 ## Where to start
 
