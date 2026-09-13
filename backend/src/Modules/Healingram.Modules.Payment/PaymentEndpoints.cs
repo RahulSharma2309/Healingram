@@ -56,6 +56,20 @@ internal static class PaymentEndpoints
             PaymentSettings settings,
             CancellationToken cancellationToken)
             => LocalWebhook(body, http, service, settings, cancellationToken));
+
+        app.MapPost("/api/admin/payments/simulate", (
+            FakeWebhookRequest body,
+            PaymentService service,
+            PaymentSettings settings,
+            CancellationToken cancellationToken) =>
+        {
+            if (!settings.AllowLocalSimulate)
+            {
+                return Task.FromResult(Results.NotFound());
+            }
+
+            return Handle(service.HandleFakeWebhookAsync(settings.WebhookSecret, body, cancellationToken));
+        }).RequireAuthorization(IdentityPolicies.AdminWrite).WithTags("Admin");
     }
 
     private static Task<IResult> LocalWebhook(

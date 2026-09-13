@@ -11,4 +11,6 @@ public static class IdentityPolicies
 {
     public const string PartnerWrite = "PartnerWrite";
     public const string AdminWrite = "AdminWrite";
+    public const string AdminRequestsRead = "admin.requests.read";
+    public const string AdminRequestsManage = "admin.requests.manage";
 }

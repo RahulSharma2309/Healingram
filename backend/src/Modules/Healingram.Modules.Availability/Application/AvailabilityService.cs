@@ -61,8 +61,17 @@ internal sealed class AvailabilityService(
                 : AvailabilityOutcome.Conflict(existing);
         }
 
-        var customerUserId = actor.UserId
-            ?? await guests.EnsureCustomerAsync(stay.Email, stay.Phone, stay.CustomerName, cancellationToken);
+        Guid? customerUserId = actor.UserId;
+        if (customerUserId is null)
+        {
+            var guest = await guests.EnsureCustomerAsync(stay.Email, stay.Phone, stay.CustomerName, cancellationToken);
+            if (guest.RequiresSignIn)
+            {
+                return AvailabilityOutcome.Invalid("You already have a Healingram account. Please sign in to continue.");
+            }
+
+            customerUserId = guest.UserId;
+        }
 
         var now = clock.GetUtcNow();
         var year = now.Year;
@@ -329,22 +338,38 @@ internal sealed class AvailabilityService(
     }
 
     public async Task<IReadOnlyList<AvailabilityRequestEntity>> ListMineAsync(
-        Guid customerUserId,
+        Actor actor,
         CancellationToken cancellationToken)
     {
         using var activity = AvailabilityTelemetry.Source.StartActivity("availability.list_mine");
+        if (actor.UserId is null)
+        {
+            return [];
+        }
+
+        if (actor.IsGuestRequest)
+        {
+            return await ListGuestScopedAsync(actor, cancellationToken);
+        }
+
         activity?.SetTag("availability.customer_scoped", true);
-        var items = await store.ListByCustomerUserIdAsync(customerUserId, cancellationToken);
+        var items = await store.ListByCustomerUserIdAsync(actor.UserId.Value, cancellationToken);
         logger.LogInformation("Listed {Count} requests for a customer", items.Count);
         return items;
     }
 
-    public async Task<TripGroupsDto> ListTripsAsync(Guid customerUserId, CancellationToken cancellationToken)
+    public async Task<TripGroupsDto> ListTripsAsync(Actor actor, CancellationToken cancellationToken)
     {
         using var activity = AvailabilityTelemetry.Source.StartActivity("availability.list_trips");
-        activity?.SetTag("availability.customer_scoped", true);
+        if (actor.UserId is null)
+        {
+            return TripGroupsDto.Empty;
+        }
 
-        var items = await store.ListByCustomerUserIdAsync(customerUserId, cancellationToken);
+        activity?.SetTag("availability.customer_scoped", true);
+        IReadOnlyList<AvailabilityRequestEntity> items = actor.IsGuestRequest
+            ? await ListGuestScopedAsync(actor, cancellationToken)
+            : await store.ListByCustomerUserIdAsync(actor.UserId.Value, cancellationToken);
         var confirmed = items
             .Where(i => string.Equals(i.Status, AvailabilityStatuses.Confirmed, StringComparison.Ordinal))
             .ToArray();
@@ -374,6 +399,24 @@ internal sealed class AvailabilityService(
             upcoming.Length,
             cancelled.Length);
         return new TripGroupsDto(paymentPending, upcoming, [], cancelled);
+    }
+
+    private async Task<IReadOnlyList<AvailabilityRequestEntity>> ListGuestScopedAsync(
+        Actor actor,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(actor.ScopedRequestId))
+        {
+            return [];
+        }
+
+        var one = await store.FindByPublicIdAsync(actor.ScopedRequestId, cancellationToken);
+        if (one is null || !await CanReadAsync(actor, one, cancellationToken))
+        {
+            return [];
+        }
+
+        return [one];
     }
 
     public Task<IReadOnlyList<AvailabilityRequestEntity>> ListAdminPendingAsync(CancellationToken cancellationToken)

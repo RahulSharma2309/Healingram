@@ -21,8 +21,8 @@ These are the things that would hurt guests or the business if you skip them.
 | Rotate / disable demo users | `Local123!` is public in docs |
 | Managed Postgres + TLS + private network | API talks to DB on a private subnet, not `0.0.0.0` |
 | Secrets not in git | Connection string, Razorpay key, SMTP |
-| Rate limit login and lead POST on the gateway | Stops password stuffing and lead spam |
-| CORS only your website origin | Not `*` in production |
+| Partitioned rate limits (login / OTP / lead) on the gateway | API has one `sensitive` 20/min window today — laptop UAT only |
+| CORS only your website origin | Production already uses configured `App:*Url` origins only. Development still adds localhost |
 | Security headers | HSTS, no sniff, tight referrer |
 | Dependency alerts | GitHub Dependabot; we already have some NuGet advisories to watch |
 | Backup encryption and a restore test | Ransomware / disk death |

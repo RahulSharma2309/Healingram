@@ -25,13 +25,14 @@ internal sealed class PostgresPaymentStore(IConfiguration configuration) : IPaym
             await using var insert = new NpgsqlCommand(
                 """
                 INSERT INTO payment.intents (
-                    id, booking_id, provider, provider_ref, amount_inr, currency, status, idempotency_key, created_at)
+                    id, booking_id, customer_user_id, provider, provider_ref, amount_inr, currency, status, idempotency_key, created_at)
                 VALUES (
-                    @id, @bookingId, @provider, @providerRef, @amount, @currency, @status, @idempotencyKey, @createdAt)
+                    @id, @bookingId, @customerUserId, @provider, @providerRef, @amount, @currency, @status, @idempotencyKey, @createdAt)
                 """,
                 connection);
             insert.Parameters.AddWithValue("id", entity.Id);
             insert.Parameters.AddWithValue("bookingId", entity.BookingId);
+            insert.Parameters.AddWithValue("customerUserId", (object?)entity.CustomerUserId ?? DBNull.Value);
             insert.Parameters.AddWithValue("provider", entity.Provider);
             insert.Parameters.AddWithValue("providerRef", (object?)entity.ProviderRef ?? DBNull.Value);
             insert.Parameters.AddWithValue("amount", entity.AmountInr);
@@ -105,7 +106,7 @@ internal sealed class PostgresPaymentStore(IConfiguration configuration) : IPaym
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             $"""
-            SELECT id, booking_id, provider, provider_ref, amount_inr, currency, status, idempotency_key, created_at
+            SELECT id, booking_id, customer_user_id, provider, provider_ref, amount_inr, currency, status, idempotency_key, created_at
             FROM payment.intents
             WHERE {whereSql}
             LIMIT 1
@@ -123,13 +124,14 @@ internal sealed class PostgresPaymentStore(IConfiguration configuration) : IPaym
         {
             Id = reader.GetGuid(0),
             BookingId = reader.GetGuid(1),
-            Provider = reader.GetString(2),
-            ProviderRef = reader.IsDBNull(3) ? null : reader.GetString(3),
-            AmountInr = reader.GetFieldValue<decimal>(4),
-            Currency = reader.GetString(5),
-            Status = reader.GetString(6),
-            IdempotencyKey = reader.GetString(7),
-            CreatedAt = reader.GetFieldValue<DateTimeOffset>(8)
+            CustomerUserId = reader.IsDBNull(2) ? null : reader.GetGuid(2),
+            Provider = reader.GetString(3),
+            ProviderRef = reader.IsDBNull(4) ? null : reader.GetString(4),
+            AmountInr = reader.GetFieldValue<decimal>(5),
+            Currency = reader.GetString(6),
+            Status = reader.GetString(7),
+            IdempotencyKey = reader.GetString(8),
+            CreatedAt = reader.GetFieldValue<DateTimeOffset>(9)
         };
     }
 

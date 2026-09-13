@@ -9,5 +9,5 @@ internal interface IBookingStore
     Task<BookingEntity?> FindByPublicIdAsync(string publicId, CancellationToken cancellationToken);
     Task<long> NextBookingSequenceAsync(CancellationToken cancellationToken);
     Task InsertAsync(BookingEntity entity, CancellationToken cancellationToken);
-    Task MarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken);
+    Task<bool> TryMarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken);
 }

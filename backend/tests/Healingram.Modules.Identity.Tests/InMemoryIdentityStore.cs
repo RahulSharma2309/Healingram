@@ -167,6 +167,11 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
         return Task.CompletedTask;
     }
 
+    public void ReplaceAdminPermissions(Guid userId, params string[] permissions)
+    {
+        _permissions[userId] = new HashSet<string>(permissions, StringComparer.OrdinalIgnoreCase);
+    }
+
     private void GrantRole(Guid userId, string role)
     {
         if (!_roles.TryGetValue(userId, out var roles))

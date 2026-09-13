@@ -43,8 +43,10 @@ public class ProductionSafetyTests
         {
             ["Jwt:Key"] = "production-jwt-key-must-be-long-enough-32",
             ["Payment:WebhookSecret"] = "production-webhook-secret",
-            ["Otp:Provider"] = "twilio",
-            ["Payment:Provider"] = "razorpay",
+            ["Otp:Provider"] = "local",
+            ["Payment:Provider"] = "local",
+            ["Otp:AllowLocalInProduction"] = "true",
+            ["Payment:AllowLocalInProduction"] = "true",
             ["Identity:SeedOnStartup"] = "true",
             ["DemoMode"] = "false"
         }).Build();
@@ -52,6 +54,46 @@ public class ProductionSafetyTests
         var ex = Assert.Throws<InvalidOperationException>(
             () => HealingramRuntime.EnsureSafeToStart(new StubHost("Production"), config));
         Assert.Contains("seed", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Production_refuses_unimplemented_providers()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = "production-jwt-key-must-be-long-enough-32",
+            ["Payment:WebhookSecret"] = "production-webhook-secret",
+            ["Otp:Provider"] = "twilio",
+            ["Payment:Provider"] = "razorpay",
+            ["DemoMode"] = "false"
+        }).Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => HealingramRuntime.EnsureSafeToStart(new StubHost("Production"), config));
+        Assert.Contains("not implemented", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Production_cors_excludes_localhost()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["App:CustomerUrl"] = "https://healingram.com",
+            ["App:VendorUrl"] = "https://vendor.healingram.com",
+            ["App:AdminUrl"] = "https://admin.healingram.com"
+        }).Build();
+
+        var runtime = HealingramRuntime.From(new StubHost("Production"), config);
+        Assert.DoesNotContain(runtime.CorsOrigins, origin => origin.Contains("localhost", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("https://healingram.com", runtime.CorsOrigins);
+        Assert.Contains("https://vendor.healingram.com", runtime.CorsOrigins);
+    }
+
+    [Fact]
+    public void Development_cors_includes_localhost()
+    {
+        var runtime = HealingramRuntime.From(new StubHost("Development"), new ConfigurationBuilder().Build());
+        Assert.Contains("http://localhost:5173", runtime.CorsOrigins);
     }
 
     private sealed class StubHost(string name) : IHostEnvironment

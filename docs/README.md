@@ -8,7 +8,7 @@ Healingram is a **programme-led retreat marketplace**. A guest does not buy a ho
 | --- | --- | --- |
 | [po-flows/](po-flows/) | You as Product Owner | How each journey feels, in plain language |
 | [technical-flows/](technical-flows/) | You as engineer | Screen → API → Postgres table for each journey |
-| [engineering/](engineering/) | You as founder-engineer | Stack, deploy, security, scale, **cost** |
+| [engineering/](engineering/) | You as founder-engineer | Stack, deploy, security, scale, **cost**. Authz: [engineering/security-and-authorization.md](engineering/security-and-authorization.md) |
 | [test-cases/](test-cases/) | You testing locally | Cases you can tick pass/fail |
 | [how-we-built-it/](how-we-built-it/) | You learning agents | How this app was built with Cursor agents, and how to do the next one |
 | [leadership-review.md](leadership-review.md) | You as founder before deploy | CEO + CPO + CTO critique: **NO-GO** until P0 bugs are closed |

@@ -42,11 +42,16 @@ internal sealed class InMemoryBookingStore : IBookingStore
         return Task.CompletedTask;
     }
 
-    public Task MarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken)
+    public Task<bool> TryMarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken)
     {
         _ = paidAt;
-        var entity = _items.First(i => i.Id == bookingId);
+        var entity = _items.FirstOrDefault(i => i.Id == bookingId);
+        if (entity is null || !string.Equals(entity.Status, BookingStatuses.AwaitingPayment, StringComparison.Ordinal))
+        {
+            return Task.FromResult(false);
+        }
+
         entity.Status = BookingStatuses.Paid;
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 }

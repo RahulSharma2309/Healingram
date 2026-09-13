@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Healingram.Contracts.Identity;
+using Healingram.Contracts.Otp;
 using Healingram.Modules.Identity.Data;
 using Microsoft.IdentityModel.Tokens;
 
@@ -12,7 +14,8 @@ internal sealed record IssuedRefreshToken(string Token, string Hash, DateTimeOff
 internal sealed record AccessTokenIssue(
     string? Purpose = null,
     string? RequestId = null,
-    IReadOnlyList<string>? Roles = null);
+    IReadOnlyList<string>? Roles = null,
+    string? AuthKind = null);
 
 internal interface ITokenService
 {
@@ -27,13 +30,16 @@ internal sealed class JwtTokenService(JwtSettings settings, TimeProvider clock) 
     {
         var now = clock.GetUtcNow();
         var roles = issue?.Roles is { Count: > 0 } listed ? listed : [user.Role];
+        var authKind = issue?.AuthKind
+            ?? (string.Equals(issue?.Purpose, OtpPurposes.RequestAccess, StringComparison.OrdinalIgnoreCase)
+                ? AuthKinds.GuestRequest
+                : AuthKinds.Registered);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")),
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new("email", user.Email),
-            new("name", user.FullName ?? user.Email),
+            new(AuthKinds.Claim, authKind),
             new("account_status", user.AccountStatus)
         };
         foreach (var role in roles)

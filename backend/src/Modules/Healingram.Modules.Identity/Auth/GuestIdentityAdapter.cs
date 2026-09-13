@@ -5,7 +5,7 @@ namespace Healingram.Modules.Identity.Auth;
 
 internal sealed class GuestIdentityAdapter(IIdentityStore store) : IGuestIdentityPort
 {
-    public async Task<Guid> EnsureCustomerAsync(
+    public async Task<GuestIdentityResult> EnsureCustomerAsync(
         string email,
         string phoneE164,
         string displayName,
@@ -17,7 +17,7 @@ internal sealed class GuestIdentityAdapter(IIdentityStore store) : IGuestIdentit
                        ?? await store.FindByPhoneAsync(normalizedPhone, cancellationToken);
         if (existing is not null)
         {
-            return existing.Id;
+            return AttachOrAskSignIn(existing);
         }
 
         var (firstName, lastName) = ProfileRules.SplitName(null, null, displayName);
@@ -42,12 +42,22 @@ internal sealed class GuestIdentityAdapter(IIdentityStore store) : IGuestIdentit
             var raced = await store.FindByEmailAsync(normalizedEmail, cancellationToken);
             if (raced is not null)
             {
-                return raced.Id;
+                return AttachOrAskSignIn(raced);
             }
 
             throw;
         }
 
-        return user.Id;
+        return new GuestIdentityResult(user.Id, false);
+    }
+
+    private static GuestIdentityResult AttachOrAskSignIn(IdentityUser existing)
+    {
+        if (string.Equals(existing.AccountStatus, AccountStatuses.Guest, StringComparison.OrdinalIgnoreCase))
+        {
+            return new GuestIdentityResult(existing.Id, false);
+        }
+
+        return new GuestIdentityResult(null, true);
     }
 }

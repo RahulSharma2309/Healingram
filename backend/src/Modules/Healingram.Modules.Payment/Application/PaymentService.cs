@@ -228,23 +228,54 @@ internal sealed class PaymentService(
             clock.GetUtcNow(),
             cancellationToken);
 
-        if (!inserted)
-        {
-            logger.LogInformation("Payment webhook replayed for intent {IntentId}", intent.Id);
-            var current = await store.FindByIdAsync(intent.Id, cancellationToken) ?? intent;
-            return PaymentOutcome.Ok(current);
-        }
-
         if (!NormalizedPaymentStatuses.IsPaid(ev.NormalizedStatus))
         {
             return PaymentOutcome.Invalid("provider event is not a successful payment");
         }
 
-        if (!string.Equals(intent.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
+        var current = inserted
+            ? intent
+            : await store.FindByIdAsync(intent.Id, cancellationToken) ?? intent;
+        if (!inserted)
         {
-            await store.MarkIntentPaidAsync(intent.Id, cancellationToken);
-            intent.Status = PaymentStatuses.Paid;
-            await bookings.MarkPaidAsync(intent.BookingId, cancellationToken);
+            logger.LogInformation("Payment webhook replayed for intent {IntentId}", current.Id);
+        }
+
+        if (!string.Equals(current.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
+        {
+            await store.MarkIntentPaidAsync(current.Id, cancellationToken);
+            current.Status = PaymentStatuses.Paid;
+        }
+
+        return await ReconcileBookingPaidAsync(current, cancellationToken);
+    }
+
+    internal static bool SecretsEqual(string provided, string expected)
+    {
+        var left = Encoding.UTF8.GetBytes(provided);
+        var right = Encoding.UTF8.GetBytes(expected);
+        if (left.Length != right.Length)
+        {
+            return false;
+        }
+
+        return CryptographicOperations.FixedTimeEquals(left, right);
+    }
+
+    private async Task<PaymentOutcome> ReconcileBookingPaidAsync(
+        PaymentIntentEntity intent,
+        CancellationToken cancellationToken)
+    {
+        var marked = await bookings.MarkPaidAsync(intent.BookingId, cancellationToken);
+        if (!marked.Applied)
+        {
+            logger.LogWarning(
+                "Payment {IntentId} is paid but booking transition was {Kind}",
+                intent.Id,
+                marked.Kind);
+            return marked.Kind == MarkPaidKind.NotFound
+                ? PaymentOutcome.Invalid(marked.Error ?? "booking not found for payment")
+                : PaymentOutcome.Conflict(intent);
         }
 
         logger.LogInformation("Payment intent {IntentId} marked paid", intent.Id);
@@ -265,18 +296,6 @@ internal sealed class PaymentService(
         }
 
         return PaymentOutcome.Ok(intent);
-    }
-
-    internal static bool SecretsEqual(string provided, string expected)
-    {
-        var left = Encoding.UTF8.GetBytes(provided);
-        var right = Encoding.UTF8.GetBytes(expected);
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        return CryptographicOperations.FixedTimeEquals(left, right);
     }
 
     private static bool CanAccess(PaymentActor actor, Guid? ownerId)

@@ -11,9 +11,11 @@
   → notifications.outbox
 ```
 
-Policy: `PartnerWrite` (role `partner` or `admin`). Customer token → `403`.
+Policy: `PartnerWrite` = authenticated + partner/admin role + **active partner membership** (admins skip membership). Customer token → `403`.
 
-Partner queue is filtered by `partners.partner_retreats` (which slugs this user may see).
+Each confirm/alternative/unavailable call also checks **retreat-level** authorization (`IPartnerAuthorization` / `partners.partner_retreats`). Role alone is not enough.
+
+See [security-and-authorization.md](../engineering/security-and-authorization.md).
 
 ## APIs
 

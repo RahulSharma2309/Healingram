@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
-import { fetchCurrentUser, userHasRole, type AuthUser } from "../../lib/api/auth";
+import { fetchCurrentUser, userHasActivePartnerMembership, userHasRole, type AuthUser } from "../../lib/api/auth";
 import { getAccessToken } from "../../lib/api/client";
 import { adminPortalHref, vendorPortalHref } from "../../lib/runtimeConfig";
 
@@ -41,7 +41,9 @@ export function VendorPortalGuard({ children }: { children: ReactNode }) {
   if (!user) {
     return <Navigate to="/vendor/login" replace state={{ from: location.pathname }} />;
   }
-  if (!userHasRole(user, "partner") && !userHasRole(user, "admin")) {
+  const vendorOk = userHasRole(user, "admin")
+    || (userHasRole(user, "partner") && userHasActivePartnerMembership(user));
+  if (!vendorOk) {
     return <Forbidden title="Vendor access required" homeTo="/" />;
   }
   return children;

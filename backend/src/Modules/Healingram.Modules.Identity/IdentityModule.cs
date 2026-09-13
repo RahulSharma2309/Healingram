@@ -31,7 +31,7 @@ public sealed class IdentityModule : IAppModule
         services.AddSingleton(jwt);
         services.AddSingleton(sp =>
             OtpSettings.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsDevelopment()));
-        services.AddSingleton<IOtpProvider, LocalOtpProvider>();
+        services.AddSingleton(sp => OtpProviderFactory.Create(sp.GetRequiredService<OtpSettings>()));
         services.AddSingleton<IUserPasswordHasher, AspNetIdentityPasswordHasher>();
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton(TimeProvider.System);

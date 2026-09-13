@@ -1,8 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { authErrorMessage, loginWithPassword, userHasRole } from "../../lib/api/auth";
+import { authErrorMessage, loginWithPassword, persistAuthenticatedSession, userHasRole } from "../../lib/api/auth";
 import { applyAuthUser } from "../../lib/auth";
-import { isDemoMode, resolvePortal } from "../../lib/runtimeConfig";
+import { isDemoMode, staffLoginDestination } from "../../lib/runtimeConfig";
 
 export function AdminLogin() {
   const navigate = useNavigate();
@@ -18,14 +18,14 @@ export function AdminLogin() {
     setBusy(true);
     setError(null);
     try {
-      const session = await loginWithPassword(email.trim(), password);
-      applyAuthUser(session.user);
+      const session = await loginWithPassword(email.trim(), password, false);
       if (!userHasRole(session.user, "admin")) {
         setError("This account is not an admin.");
         return;
       }
-      const dest = resolvePortal() === "admin" ? "/" : from.startsWith("/admin") ? from : "/admin";
-      navigate(dest, { replace: true });
+      await persistAuthenticatedSession(session);
+      applyAuthUser(session.user);
+      navigate(staffLoginDestination("admin", from), { replace: true });
     } catch (err) {
       setError(authErrorMessage(err));
     } finally {

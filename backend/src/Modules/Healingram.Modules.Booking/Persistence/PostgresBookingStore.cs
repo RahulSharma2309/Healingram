@@ -106,24 +106,33 @@ internal sealed class PostgresBookingStore(IConfiguration configuration) : IBook
         }
     }
 
-    public async Task MarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken)
+    public async Task<bool> TryMarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken)
     {
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(cancellationToken);
 
+        int updated;
         await using (var update = new NpgsqlCommand(
             """
             UPDATE booking.bookings
             SET status = @status
             WHERE id = @id
+              AND status = @fromStatus
             """,
             connection,
             tx))
         {
             update.Parameters.AddWithValue("status", BookingStatuses.Paid);
+            update.Parameters.AddWithValue("fromStatus", BookingStatuses.AwaitingPayment);
             update.Parameters.AddWithValue("id", bookingId);
-            await update.ExecuteNonQueryAsync(cancellationToken);
+            updated = await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (updated == 0)
+        {
+            await tx.RollbackAsync(cancellationToken);
+            return false;
         }
 
         await using (var ev = new NpgsqlCommand(
@@ -143,6 +152,7 @@ internal sealed class PostgresBookingStore(IConfiguration configuration) : IBook
         }
 
         await tx.CommitAsync(cancellationToken);
+        return true;
     }
 
     private async Task<BookingEntity?> FindByColumnAsync(string column, Guid value, CancellationToken cancellationToken)

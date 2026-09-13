@@ -52,6 +52,9 @@ internal interface IOtpChallengeStore
     Task InsertAsync(OtpChallenge challenge, CancellationToken cancellationToken);
     Task<OtpChallenge?> FindLatestOpenAsync(string destination, string purpose, CancellationToken cancellationToken);
     Task UpdateAsync(OtpChallenge challenge, CancellationToken cancellationToken);
+    Task SetProviderReferenceAsync(Guid id, string? providerReference, CancellationToken cancellationToken);
+    Task<bool> TryIncrementAttemptsAsync(Guid id, CancellationToken cancellationToken);
+    Task<bool> TryConsumeAsync(Guid id, DateTimeOffset now, CancellationToken cancellationToken);
 }
 
 internal static class OtpHashes

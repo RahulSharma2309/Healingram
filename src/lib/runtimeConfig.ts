@@ -16,13 +16,32 @@ export function adminAppUrl(): string {
   return trimUrl(import.meta.env.VITE_ADMIN_APP_URL) || `${window.location.origin}/admin`;
 }
 
-export function resolvePortal(hostname = window.location.hostname, pathname = window.location.pathname): PortalName {
+export function configuredPortal(hostname = window.location.hostname): PortalName | null {
+  const env = import.meta.env.VITE_PORTAL as string | undefined;
+  if (env === "vendor" || env === "admin" || env === "customer") return env;
   const host = hostname.toLowerCase();
   if (host.startsWith("vendor.") || host.includes("vendor.healingram")) return "vendor";
   if (host.startsWith("admin.") || host.includes("admin.healingram")) return "admin";
-  if (pathname === "/vendor" || pathname.startsWith("/vendor/")) return "vendor";
-  if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
-  return "customer";
+  return null;
+}
+
+export function resolvePortal(hostname = window.location.hostname, pathname = window.location.pathname): PortalName {
+  return configuredPortal(hostname)
+    ?? (pathname === "/vendor" || pathname.startsWith("/vendor/")
+      ? "vendor"
+      : pathname === "/admin" || pathname.startsWith("/admin/")
+        ? "admin"
+        : "customer");
+}
+
+export function staffLoginDestination(portal: "vendor" | "admin", from: string): string {
+  if (configuredPortal() === portal) {
+    if (from === `/${portal}/login` || from === "/login") return "/";
+    return from.startsWith("/") ? from : "/";
+  }
+  const prefix = `/${portal}`;
+  if (from.startsWith(prefix) && from !== `${prefix}/login`) return from;
+  return prefix;
 }
 
 export function vendorPortalHref(): string {
