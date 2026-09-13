@@ -20,4 +20,14 @@ public static class PartnerMembershipRoles
     /// </summary>
     public static bool IsKnown(string? role)
         => role is Owner or Manager or Finance or Operations or Member;
+
+    /// <summary>
+    /// Request confirm / alternative / unavailable. V1 allows every known active role.
+    /// Finance-only policies can be added later without changing authentication.
+    /// </summary>
+    public static bool CanManageRequests(string? role)
+        => IsKnown(role);
+
+    public static bool CanManageFinance(string? role)
+        => role is Owner or Manager or Finance;
 }

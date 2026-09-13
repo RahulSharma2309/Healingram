@@ -7,7 +7,6 @@ import {
   activeFilterChips,
   browseStateToSearchParams,
   countActiveFilters,
-  filterBrowseRetreats,
   getDurationOptionsWithCounts,
   getLocationOptionsWithCounts,
   getNeedOptionsWithCounts,
@@ -26,7 +25,19 @@ export function RetreatList() {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseBrowseStateFromParams(params), [params]);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { retreats: inventory, places, needs, needThemeMap, source } = usePublishedRetreats();
+  const catalogQuery = useMemo(() => {
+    const states = state.locations
+      .filter((key) => key.startsWith("region:"))
+      .map((key) => key.slice("region:".length));
+    const localities = state.locations.filter((key) => !key.startsWith("region:"));
+    return {
+      need: state.needs.join(",") || undefined,
+      state: states.join(",") || undefined,
+      locality: localities.join(",") || undefined,
+      duration: state.durations.join(",") || undefined,
+    };
+  }, [state.needs, state.locations, state.durations]);
+  const { retreats: inventory, places, needs, needThemeMap, source } = usePublishedRetreats(catalogQuery);
 
   const setState = (patch: Partial<AllRetreatsBrowseState>) => {
     const next: AllRetreatsBrowseState = { ...state, ...patch };
@@ -97,18 +108,10 @@ export function RetreatList() {
     [state, inventory, needThemeMap],
   );
 
-  const results = useMemo(() => {
-    const filtered = filterBrowseRetreats(
-      {
-        needs: state.needs,
-        locations: state.locations,
-        durations: state.durations,
-      },
-      inventory,
-      needThemeMap,
-    );
-    return sortBrowseRetreats(filtered, state.sort);
-  }, [state, inventory, needThemeMap]);
+  const results = useMemo(
+    () => sortBrowseRetreats(inventory, state.sort),
+    [inventory, state.sort],
+  );
 
   const chips = useMemo(
     () =>

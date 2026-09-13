@@ -24,4 +24,10 @@ internal sealed class CatalogReadPort(CatalogQueryService queries) : ICatalogRea
                 card.TypicalDuration))
             .ToArray();
     }
+
+    public Task<CatalogStayLabels?> GetStayLabelsAsync(
+        string retreatSlug,
+        string programmeSlug,
+        CancellationToken cancellationToken)
+        => queries.GetStayLabelsAsync(retreatSlug, programmeSlug, cancellationToken);
 }

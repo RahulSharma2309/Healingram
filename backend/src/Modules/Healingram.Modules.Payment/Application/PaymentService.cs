@@ -5,6 +5,7 @@ using System.Text.Json;
 using Healingram.BuildingBlocks.Notifications;
 using Healingram.Contracts.Audit;
 using Healingram.Contracts.Booking;
+using Healingram.Contracts.Inventory;
 using Healingram.Contracts.Payment;
 using Healingram.Modules.Payment.Persistence;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,8 @@ internal sealed class PaymentService(
     TimeProvider clock,
     ILogger<PaymentService> logger,
     INotificationOutbox? outbox = null,
-    IAuditPort? audit = null)
+    IAuditPort? audit = null,
+    IInventoryProvider? inventory = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -145,6 +147,15 @@ internal sealed class PaymentService(
         {
             activity?.SetTag("payment.intent_id", entity.Id.ToString());
             logger.LogInformation("Payment intent {IntentId} created for booking {BookingNumber}", entity.Id, booking.BookingNumber);
+            if (outbox is not null)
+            {
+                await outbox.EnqueueAsync(
+                    NotificationKinds.PaymentInitiated,
+                    $"payment-initiated:{entity.Id}",
+                    new { intentId = entity.Id },
+                    cancellationToken);
+            }
+
             await WriteAuditAsync("payment.intent_created", "payment_intent", entity.Id.ToString(), actor.UserId, cancellationToken);
         }
 
@@ -333,12 +344,26 @@ internal sealed class PaymentService(
         }
 
         logger.LogInformation("Payment intent {IntentId} marked paid", intent.Id);
+        if (inventory is not null)
+        {
+            var gate = await bookings.FindByBookingIdAsync(intent.BookingId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(gate?.PublicId))
+            {
+                await inventory.ConfirmByRequestPublicIdAsync(gate.PublicId, cancellationToken);
+            }
+        }
+
         if (outbox is not null)
         {
             await outbox.EnqueueAsync(
                 NotificationKinds.PaymentPaid,
                 $"payment-paid:{intent.Id}",
                 new { intentId = intent.Id },
+                cancellationToken);
+            await outbox.EnqueueAsync(
+                NotificationKinds.BookingConfirmed,
+                $"booking-confirmed:{intent.BookingId}",
+                new { bookingId = intent.BookingId },
                 cancellationToken);
         }
 

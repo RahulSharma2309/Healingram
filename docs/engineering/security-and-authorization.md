@@ -27,7 +27,7 @@ A `guest_request` token **cannot** create another availability request.
 
 OTP purpose `REQUEST_ACCESS` is request-scoped. Start and verify both require `publicId`. If the challenge has `publicId`, verify must send the same id. Consume is atomic. Destination-aware OTP limits: resend window plus `Otp:MaxStartsPerHour` per destination.
 
-Guest verify issues `auth_kind = guest_request` (not a normal customer session). That token may read **only** the scoped request (`GET /api/availability/requests/{publicId}` or `GET /api/guest/requests/{publicId}`). `GET /api/availability/mine` returns only that request. An unscoped guest token cannot read owned requests by user id. Guest tokens cannot change `/api/users/me`, create payments, or call partner/admin APIs.
+Guest verify issues `auth_kind = guest_request` (not a normal customer session). That token may read **only** the scoped request (`GET /api/availability/requests/{publicId}` or `GET /api/guest/requests/{publicId}`). `GET /api/availability/mine` returns only that request. An unscoped guest token cannot read owned requests by user id. Guest tokens cannot change `/api/users/me`, create payments, use `/api/wishlist`, or call partner/admin APIs. `GET /api/availability/requests/{publicId}` requires authorization (guest-request tokens still work for the scoped id).
 
 ## 4. Vendor session
 
@@ -43,10 +43,13 @@ Admin access is **authenticated + admin role + required permission**. Permission
 
 | Endpoint | Permission / policy |
 | --- | --- |
+| `GET /api/admin/overview` | admin role + `users.read` |
+| `GET /api/admin/leads` | admin role + `users.read` (policy `AdminLeadsRead`; `leads.read` is reserved for a later split) |
+| `GET /api/leads/{id}` | admin role + `users.read` (policy `AdminLeadsRead`; `leads.read` is reserved for a later split) |
+| `GET /api/admin/audit` | admin role + `audit.read` |
 | `GET /api/admin/availability` | admin role + `requests.read` |
 | `POST /api/admin/availability/{id}/note` | admin role + `requests.manage` |
 | `POST /api/admin/payments/simulate` | admin role + `payments.simulate` |
-| Lead admin GET | `AdminWrite` (role admin) until those routes are split |
 
 If an admin has **no** rows in `identity.admin_permissions`, the role still grants all known permissions (bootstrap). Once any permission row exists, only those rows apply.
 
@@ -88,13 +91,14 @@ Persist challenge → dispatch → store provider reference. Verify is request-s
 
 ## 12. Provider abstraction
 
-`Otp:Provider` and `Payment:Provider` select the implementation at startup.
+`Otp:Provider`, `Payment:Provider`, and `Inventory:Provider` select the implementation at startup.
 
 - `local` (payment also `fake`) → local adapter
-- `razorpay` / `stripe` / `twilio` / `msg91` → **fail startup** (declared, not in this build)
+- `razorpay` / `stripe` / `twilio` / `msg91` / `external` inventory → **fail startup** (declared, not in this build)
 - unknown → **fail startup** (no silent Local fallback)
+- Production also refuses `local` inventory unless `Inventory:AllowLocalInProduction=true`
 
-Business code talks to `IOtpProvider` / `IPaymentProvider` only.
+Business code talks to `IOtpProvider` / `IPaymentProvider` / `IInventoryProvider` only. Availability creates a local hold; unavailable/cancel release it; a paid webhook confirms it. Booking cancel / refund_pending / refunded are explicit store transitions.
 
 ## 13. Portal separation
 
@@ -113,7 +117,7 @@ Local fallback is pathname `/vendor` and `/admin` on the same origin. Login dest
 
 ## 15. Frontend state
 
-The API and PostgreSQL are authoritative for payment, booking, availability, and authorization. `sessionStorage` holds tokens and payment idempotency/intent ids. `localStorage` may cache display/UX only. PaymentReady waits for the server request; it does not treat a local cache as payment-ready.
+The API and PostgreSQL are authoritative for payment, booking, availability, catalog, homepage copy, and authorization. `sessionStorage` holds tokens and payment idempotency/intent ids. `src/` has no `localStorage`. Availability screens load from the API (or the POST 201 payload via navigation state). An API failure is an error, not an empty catalog.
 
 ## Still later
 

@@ -35,6 +35,21 @@ internal static class IdentityAuthorization
                 policy.RequireAuthenticatedUser()
                     .RequireAssertion(ctx => RoleAuthorization.CanAuthorizeAdminWrite(ctx.User))
                     .AddRequirements(new AdminPermissionRequirement(AdminPermissions.PaymentsSimulate)));
+
+            options.AddPolicy(IdentityPolicies.AdminUsersRead, policy =>
+                policy.RequireAuthenticatedUser()
+                    .RequireAssertion(ctx => RoleAuthorization.CanAuthorizeAdminWrite(ctx.User))
+                    .AddRequirements(new AdminPermissionRequirement(AdminPermissions.UsersRead)));
+
+            options.AddPolicy(IdentityPolicies.AdminAuditRead, policy =>
+                policy.RequireAuthenticatedUser()
+                    .RequireAssertion(ctx => RoleAuthorization.CanAuthorizeAdminWrite(ctx.User))
+                    .AddRequirements(new AdminPermissionRequirement(AdminPermissions.AuditRead)));
+
+            options.AddPolicy(IdentityPolicies.AdminLeadsRead, policy =>
+                policy.RequireAuthenticatedUser()
+                    .RequireAssertion(ctx => RoleAuthorization.CanAuthorizeAdminWrite(ctx.User))
+                    .AddRequirements(new AdminPermissionRequirement(AdminPermissions.UsersRead)));
         });
 
         return services;

@@ -6,20 +6,30 @@ type Props = { title: string; contact?: boolean; faq?: boolean; slug?: string };
 export function StaticPage({ title, contact, faq, slug }: Props) {
   const [page, setPage] = useState<ContentPage | null>(null);
   const [faqs, setFaqs] = useState<ContentPage[]>([]);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
     const pageSlug = slug ?? title.toLowerCase().replace(/\s+/g, "-");
-    if (faq) {
-      fetchContentPages("faq")
-        .then(setFaqs)
-        .catch(() => setFaqs([]));
+    if (contact) {
+      setLoadState("idle");
       return;
     }
-    if (!contact) {
-      fetchContentPage(pageSlug)
-        .then(setPage)
-        .catch(() => setPage(null));
+    setLoadState("loading");
+    if (faq) {
+      fetchContentPages("faq")
+        .then((items) => {
+          setFaqs(items);
+          setLoadState("ready");
+        })
+        .catch(() => setLoadState("error"));
+      return;
     }
+    fetchContentPage(pageSlug)
+      .then((item) => {
+        setPage(item);
+        setLoadState("ready");
+      })
+      .catch(() => setLoadState("error"));
   }, [contact, faq, slug, title]);
 
   return (
@@ -42,20 +52,32 @@ export function StaticPage({ title, contact, faq, slug }: Props) {
           </button>
         </form>
       )}
-      {faq && (
+      {faq && loadState === "loading" && <p className="text-sm text-sage-600">Loading FAQs…</p>}
+      {faq && loadState === "error" && (
+        <p className="text-sm text-red-700">Could not load FAQs from the content API.</p>
+      )}
+      {faq && loadState === "ready" && (
         <div className="space-y-4">
-          {faqs.map((item) => (
-            <details key={item.slug} className="bg-white rounded-xl border border-sand-200 p-4">
-              <summary className="font-medium cursor-pointer">{item.title}</summary>
-              <p className="text-gray-600 mt-2 text-sm">{item.body}</p>
-            </details>
-          ))}
+          {faqs.length === 0 ? (
+            <p className="text-sm text-sage-600">No FAQs are published yet.</p>
+          ) : (
+            faqs.map((item) => (
+              <details key={item.slug} className="bg-white rounded-xl border border-sand-200 p-4">
+                <summary className="font-medium cursor-pointer">{item.title}</summary>
+                <p className="text-gray-600 mt-2 text-sm">{item.body}</p>
+              </details>
+            ))
+          )}
         </div>
       )}
-      {!contact && !faq && (
-        <p className="text-gray-600 leading-relaxed">
-          {page?.body ?? "This page is published from the content API."}
-        </p>
+      {!contact && !faq && loadState === "loading" && (
+        <p className="text-sm text-sage-600">Loading this page…</p>
+      )}
+      {!contact && !faq && loadState === "error" && (
+        <p className="text-sm text-red-700">Could not load this page from the content API.</p>
+      )}
+      {!contact && !faq && loadState === "ready" && (
+        <p className="text-gray-600 leading-relaxed">{page?.body}</p>
       )}
     </div>
   );

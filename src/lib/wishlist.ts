@@ -28,14 +28,9 @@ export async function hydrateWishlistFromServer(): Promise<void> {
     emit();
     return;
   }
-  try {
-    const items = await fetchWishlist();
-    memory = items.map((i) => i.slug);
-    emit();
-  } catch {
-    memory = [];
-    emit();
-  }
+  const items = await fetchWishlist();
+  memory = items.map((i) => i.slug);
+  emit();
 }
 
 export async function toggleWishlist(slug: string): Promise<boolean> {

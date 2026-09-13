@@ -69,6 +69,7 @@ export function TalkToExpert() {
   const [helpOptions, setHelpOptions] = useState<LeadOption[]>([]);
   const [needOptions, setNeedOptions] = useState<LeadOption[]>([]);
   const [windowOptions, setWindowOptions] = useState<LeadOption[]>([]);
+  const [optionsError, setOptionsError] = useState(false);
 
   useEffect(() => {
     fetchLeadOptions()
@@ -76,11 +77,13 @@ export function TalkToExpert() {
         setHelpOptions(items.filter((item) => item.kind === "help_type"));
         setNeedOptions(items.filter((item) => item.kind === "wellness_need"));
         setWindowOptions(items.filter((item) => item.kind === "travel_window"));
+        setOptionsError(false);
       })
       .catch(() => {
         setHelpOptions([]);
         setNeedOptions([]);
         setWindowOptions([]);
+        setOptionsError(true);
       });
   }, []);
   const [message, setMessage] = useState("");
@@ -272,6 +275,11 @@ export function TalkToExpert() {
             )}
 
             <form onSubmit={onRequestCall} className="space-y-6" noValidate>
+              {optionsError ? (
+                <p className="text-sm text-red-700">
+                  Could not load enquiry options from the server. Refresh after the API is available.
+                </p>
+              ) : null}
               <label className="block">
                 <span className="text-sm font-medium text-sage-700">Full name</span>
                 <input
@@ -437,7 +445,7 @@ export function TalkToExpert() {
               <div className="space-y-3 pt-1">
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || optionsError}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 py-3.5 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
                 >
                   <Phone className="w-4 h-4" />
@@ -445,7 +453,7 @@ export function TalkToExpert() {
                 </button>
                 <button
                   type="button"
-                  disabled={submitting}
+                  disabled={submitting || optionsError}
                   onClick={onChatWhatsApp}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-sand-200 py-3.5 text-sm font-semibold text-sage-800 hover:bg-sand-50 disabled:opacity-60"
                 >

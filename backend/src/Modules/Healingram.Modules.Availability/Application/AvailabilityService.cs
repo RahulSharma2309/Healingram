@@ -29,7 +29,8 @@ internal sealed class AvailabilityService(
     IAuditPort? audit = null,
     ICatalogQuotePort? quotes = null,
     IInventoryProvider? inventory = null,
-    IUserInboxPort? inbox = null)
+    IUserInboxPort? inbox = null,
+    InventoryService? inventoryService = null)
 {
     public async Task<AvailabilityOutcome> CreateAsync(
         CreateAvailabilityRequest request,
@@ -65,6 +66,19 @@ internal sealed class AvailabilityService(
         {
             return AvailabilityOutcome.Invalid("retreat is not a published stay");
         }
+
+        var labels = await catalog.GetStayLabelsAsync(stay.RetreatSlug, stay.ProgrammeSlug, cancellationToken);
+        if (labels is null || string.IsNullOrWhiteSpace(labels.ProgrammeName))
+        {
+            return AvailabilityOutcome.Invalid("programme is not a published stay");
+        }
+
+        stay = stay with
+        {
+            Source = NormalizeSource(request.Source),
+            CountryCode = string.IsNullOrWhiteSpace(request.CountryCode) ? null : request.CountryCode.Trim(),
+            CustomerNotes = string.IsNullOrWhiteSpace(request.CustomerNotes) ? null : request.CustomerNotes.Trim()
+        };
 
         if (inventory is not null)
         {
@@ -114,6 +128,15 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Invalid(ex.Message);
         }
 
+        snapshotJson = PriceSnapshotFactory.Enrich(
+            snapshotJson,
+            labels,
+            stay,
+            stay.Source,
+            stay.CountryCode,
+            stay.CustomerNotes,
+            labels.SettlementMode);
+
         var year = now.Year;
         var sequence = await store.NextPublicSequenceAsync(cancellationToken);
         var entity = new AvailabilityRequestEntity
@@ -124,8 +147,8 @@ internal sealed class AvailabilityService(
             CustomerName = stay.CustomerName,
             CustomerEmail = stay.Email,
             CustomerPhone = stay.Phone,
-            RetreatId = Guid.NewGuid(),
-            ProgrammeId = Guid.NewGuid(),
+            RetreatId = labels.RetreatId,
+            ProgrammeId = labels.ProgrammeId ?? Guid.NewGuid(),
             RetreatSlug = stay.RetreatSlug,
             ProgrammeSlug = stay.ProgrammeSlug,
             Status = AvailabilityStatuses.Requested,
@@ -150,13 +173,15 @@ internal sealed class AvailabilityService(
             await InWork(
                 async () =>
                 {
-                    await store.InsertAsync(entity, cancellationToken);
                     if (inventory is not null)
                     {
-                        await inventory.CreateHoldAsync(
+                        var hold = await inventory.CreateHoldAsync(
                             new InventoryHoldRequest(entity.RetreatSlug, entity.ProgrammeSlug, entity.PublicId),
                             cancellationToken);
+                        entity.InventoryHoldId = hold.Id;
                     }
+
+                    await store.InsertAsync(entity, cancellationToken);
 
                     await EnqueueRequired(
                         NotificationKinds.AvailabilityRequested,
@@ -318,6 +343,22 @@ internal sealed class AvailabilityService(
             cancellationToken);
     }
 
+    public Task<AvailabilityOutcome> CancelAsync(
+        string publicId,
+        Actor actor,
+        CancellationToken cancellationToken)
+        => TransitionAsync(
+            publicId,
+            actor,
+            requirePartnerWrite: false,
+            AvailabilityActions.Cancel,
+            AvailabilityStatuses.Cancelled,
+            reason: "customer_cancelled",
+            alternativeJson: null,
+            finalAmountInr: null,
+            createBooking: false,
+            cancellationToken);
+
     public Task<AvailabilityOutcome> AcceptAlternativeAsync(
         string publicId,
         Actor actor,
@@ -455,7 +496,9 @@ internal sealed class AvailabilityService(
             .Select(i => ToTripCard(i) with { Status = BookingStatuses.Paid })
             .ToArray();
         var cancelled = items
-            .Where(i => string.Equals(i.Status, AvailabilityStatuses.Unavailable, StringComparison.Ordinal))
+            .Where(i =>
+                string.Equals(i.Status, AvailabilityStatuses.Unavailable, StringComparison.Ordinal)
+                || string.Equals(i.Status, AvailabilityStatuses.Cancelled, StringComparison.Ordinal))
             .Select(ToTripCard)
             .ToArray();
 
@@ -525,7 +568,9 @@ internal sealed class AvailabilityService(
             }
         }
 
-        if (!requirePartnerWrite && action == AvailabilityActions.AcceptAlternative && !await CanReadAsync(actor, entity, cancellationToken))
+        if (!requirePartnerWrite
+            && (action == AvailabilityActions.AcceptAlternative || action == AvailabilityActions.Cancel)
+            && !await CanReadAsync(actor, entity, cancellationToken))
         {
             return actor.UserId is null
                 ? AvailabilityOutcome.Unauth("Verify it's you to continue")
@@ -609,6 +654,15 @@ internal sealed class AvailabilityService(
                         $"availability-confirmed:{entity.PublicId}",
                         new { publicId = entity.PublicId },
                         cancellationToken);
+                    if (action == AvailabilityActions.AcceptAlternative)
+                    {
+                        await EnqueueRequired(
+                            NotificationKinds.AlternativeAccepted,
+                            $"alternative-accepted:{entity.PublicId}",
+                            new { publicId = entity.PublicId },
+                            cancellationToken);
+                    }
+
                     await NotifyCustomerAsync(
                         entity,
                         NotificationKinds.PaymentReady,
@@ -625,13 +679,53 @@ internal sealed class AvailabilityService(
                         "The retreat suggested a different option for your request.",
                         cancellationToken);
                 }
-                else if (string.Equals(toStatus, AvailabilityStatuses.Unavailable, StringComparison.Ordinal))
+                else if (string.Equals(toStatus, AvailabilityStatuses.Unavailable, StringComparison.Ordinal)
+                         || string.Equals(toStatus, AvailabilityStatuses.Cancelled, StringComparison.Ordinal))
                 {
+                    if (string.Equals(toStatus, AvailabilityStatuses.Cancelled, StringComparison.Ordinal))
+                    {
+                        var gate = await bookingPayments.FindByPublicIdAsync(entity.PublicId, cancellationToken);
+                        if (gate is not null
+                            && string.Equals(gate.Status, BookingStatuses.Paid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            await bookings.RequestRefundAsync(
+                                new BookingLifecycleCommand(entity.Id, reason ?? "cancelled"),
+                                cancellationToken);
+                            await EnqueueRequired(
+                                NotificationKinds.RefundInitiated,
+                                $"refund-initiated:{entity.PublicId}",
+                                new { publicId = entity.PublicId },
+                                cancellationToken);
+                        }
+                        else
+                        {
+                            await ReleaseInventoryAsync(entity, cancellationToken);
+                            await bookings.CancelAsync(
+                                new BookingLifecycleCommand(entity.Id, reason ?? "cancelled"),
+                                cancellationToken);
+                            await EnqueueRequired(
+                                NotificationKinds.BookingCancelled,
+                                $"booking-cancelled:{entity.PublicId}",
+                                new { publicId = entity.PublicId },
+                                cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        await ReleaseInventoryAsync(entity, cancellationToken);
+                    }
+
                     await NotifyCustomerAsync(
                         entity,
-                        NotificationKinds.AvailabilityUnavailable,
-                        "Those dates aren’t available",
-                        "Try different dates or see similar retreats.",
+                        string.Equals(toStatus, AvailabilityStatuses.Cancelled, StringComparison.Ordinal)
+                            ? NotificationKinds.BookingCancelled
+                            : NotificationKinds.AvailabilityUnavailable,
+                        string.Equals(toStatus, AvailabilityStatuses.Cancelled, StringComparison.Ordinal)
+                            ? "Request cancelled"
+                            : "Those dates aren’t available",
+                        string.Equals(toStatus, AvailabilityStatuses.Cancelled, StringComparison.Ordinal)
+                            ? "This request was cancelled."
+                            : "Try different dates or see similar retreats.",
                         cancellationToken);
                 }
             },
@@ -651,14 +745,14 @@ internal sealed class AvailabilityService(
         return AvailabilityOutcome.Ok(entity);
     }
 
-    private Task EnsureBookingAsync(
+    private async Task EnsureBookingAsync(
         AvailabilityRequestEntity entity,
         decimal? amount,
         CancellationToken cancellationToken)
     {
         using var bookingSpan = AvailabilityTelemetry.Source.StartActivity("availability.create_booking");
         bookingSpan?.SetTag("availability.public_id", entity.PublicId);
-        return bookings.CreateAwaitingPaymentAsync(
+        var booking = await bookings.CreateAwaitingPaymentAsync(
             new CreateAwaitingPaymentBooking(
                 entity.Id,
                 entity.PublicId,
@@ -666,6 +760,35 @@ internal sealed class AvailabilityService(
                 amount,
                 entity.CustomerUserId),
             cancellationToken);
+        entity.BookingNumber = booking.BookingNumber;
+        await store.AttachBookingAsync(entity.Id, booking.BookingNumber, cancellationToken);
+    }
+
+    private async Task ReleaseInventoryAsync(AvailabilityRequestEntity entity, CancellationToken cancellationToken)
+    {
+        if (inventoryService is not null)
+        {
+            await inventoryService.ReleaseByRequestAsync(entity.PublicId, cancellationToken);
+            return;
+        }
+
+        if (inventory is not null)
+        {
+            await inventory.ReleaseByRequestPublicIdAsync(entity.PublicId, cancellationToken);
+        }
+    }
+
+    private static string? NormalizeSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return null;
+        }
+
+        var normalized = source.Trim().ToLowerInvariant();
+        return normalized is "listing" or "find_my_match" or "admin" or "expert"
+            ? normalized
+            : null;
     }
 
     private async Task<string> CaptureSnapshotAsync(

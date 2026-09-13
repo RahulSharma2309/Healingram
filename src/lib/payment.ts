@@ -70,11 +70,11 @@ export async function createPaymentIntent(
     return {
       requestId,
       serverIntentId: server.id,
-      amount: 0,
+      amount: server.amount ?? 0,
       currency: "INR",
       settlementMode: "MARKETPLACE_SPLIT",
       status: "ready",
-      provider: "fake",
+      provider: server.provider === "local" ? "placeholder" : "fake",
       createdAt: new Date().toISOString(),
     };
   } catch (error) {

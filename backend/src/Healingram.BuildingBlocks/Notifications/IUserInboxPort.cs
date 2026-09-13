@@ -22,7 +22,11 @@ public interface IUserInboxPort
         string? entityId,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(Guid userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 20);
 
     Task<bool> MarkReadAsync(Guid userId, Guid id, CancellationToken cancellationToken);
 }
@@ -39,7 +43,11 @@ public sealed class NullUserInboxPort : IUserInboxPort
         CancellationToken cancellationToken)
         => Task.CompletedTask;
 
-    public Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(Guid userId, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 20)
         => Task.FromResult<IReadOnlyList<UserInboxItem>>([]);
 
     public Task<bool> MarkReadAsync(Guid userId, Guid id, CancellationToken cancellationToken)

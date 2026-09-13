@@ -1,31 +1,53 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { HeroDiscovery } from "../../components/HeroDiscovery";
 import { useCatalogDiscovery } from "../../lib/api/useCatalogDiscovery";
+import { fetchHomepage, type HomepageSection } from "../../lib/api/catalog";
 
 export function Home() {
   const { needs, destinations, source } = useCatalogDiscovery();
   const catalogReady = source === "api";
+  const [sections, setSections] = useState<HomepageSection[]>([]);
+  const [contentSource, setContentSource] = useState<"loading" | "api" | "error">("loading");
+
+  useEffect(() => {
+    fetchHomepage()
+      .then((items) => {
+        setSections(items);
+        setContentSource("api");
+      })
+      .catch(() => setContentSource("error"));
+  }, []);
+
+  const hero = sections.find((s) => s.slug === "hero");
+  const needsCopy = sections.find((s) => s.slug === "needs");
+  const destCopy = sections.find((s) => s.slug === "destinations");
+  const expert = sections.find((s) => s.slug === "expert");
   return (
     <>
       <section className="relative overflow-hidden flex items-center">
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=1800&q=80)",
+            backgroundImage: contentSource === "api" && hero?.imageUrl ? `url(${hero.imageUrl})` : undefined,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-sage-800/70 via-teal-800/55 to-sage-800/80" />
         <div className="relative w-full max-w-3xl mx-auto px-4 py-14 md:py-20 text-center text-white">
+          {contentSource === "error" && (
+            <p className="mb-4 text-sm text-white/90">Homepage copy could not be loaded from the catalog.</p>
+          )}
           <h1 className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-bold tracking-tight leading-[1.15] mb-4 text-balance">
-            Find the right retreat for what you’re going through.
+            {hero?.title ?? (contentSource === "loading" ? "Loading…" : "Find a retreat")}
           </h1>
-          <p className="text-base md:text-lg font-medium leading-relaxed text-white/90 mb-8 max-w-2xl mx-auto text-balance">
-            Find retreats, practices and people that help you return to yourself.
-          </p>
+          {hero?.body && (
+            <p className="text-base md:text-lg font-medium leading-relaxed text-white/90 mb-8 max-w-2xl mx-auto text-balance">
+              {hero.body}
+            </p>
+          )}
           <HeroDiscovery />
         </div>
       </section>
@@ -35,11 +57,13 @@ export function Home() {
         <div className="max-w-7xl mx-auto">
           <div className="max-w-2xl mx-auto text-center mb-10">
             <h2 className="font-display text-2xl md:text-3xl font-bold text-sage-800 mb-3 text-balance">
-              Explore by what you need
+              {needsCopy?.title ?? "Explore by what you need"}
             </h2>
-            <p className="text-sage-600 text-base md:text-lg leading-relaxed text-balance">
-              Start with what you’re looking for. We’ll show you retreats that fit.
-            </p>
+            {needsCopy?.body && (
+              <p className="text-sage-600 text-base md:text-lg leading-relaxed text-balance">
+                {needsCopy.body}
+              </p>
+            )}
           </div>
 
           {!catalogReady && (
@@ -97,11 +121,13 @@ export function Home() {
               id="home-destinations-heading"
               className="font-display text-2xl md:text-3xl font-bold text-sage-800 mb-3 text-balance"
             >
-              Explore by destination
+              {destCopy?.title ?? "Explore by destination"}
             </h2>
-            <p className="text-sage-600 text-base md:text-lg leading-relaxed text-balance">
-              Destinations come from published inventory — including Karnataka, Kerala, and the extra local-demo states.
-            </p>
+            {destCopy?.body && (
+              <p className="text-sage-600 text-base md:text-lg leading-relaxed text-balance">
+                {destCopy.body}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
@@ -147,8 +173,7 @@ export function Home() {
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage:
-              "url(https://images.unsplash.com/photo-1545205597-3d9d02c29597?w=1600&q=80)",
+            backgroundImage: contentSource === "api" && expert?.imageUrl ? `url(${expert.imageUrl})` : undefined,
             backgroundSize: "cover",
             backgroundPosition: "center",
           }}
@@ -160,17 +185,18 @@ export function Home() {
             id="home-expert-cta-heading"
             className="font-display text-2xl md:text-3xl font-semibold text-balance"
           >
-            Still not sure which retreat is right for you?
+            {expert?.title ?? "Talk to an expert"}
           </h2>
-          <p className="mt-3 text-sm md:text-base text-white/90 leading-relaxed text-balance">
-            Tell us what you’re looking for and a Healingram expert can help you narrow down the
-            options.
-          </p>
+          {expert?.body && (
+            <p className="mt-3 text-sm md:text-base text-white/90 leading-relaxed text-balance">
+              {expert.body}
+            </p>
+          )}
           <Link
-            to="/contact"
+            to={expert?.ctaHref || "/contact"}
             className="mt-6 inline-flex items-center justify-center rounded-xl bg-teal-600 px-6 py-3 text-sm font-semibold text-white hover:bg-teal-500 transition"
           >
-            Talk to an Expert
+            {expert?.ctaLabel ?? "Talk to an Expert"}
           </Link>
         </div>
       </section>

@@ -33,6 +33,22 @@ internal sealed record ThemeDto(string Slug, string Label, int SortOrder);
 
 internal sealed record ContentPageDto(string Slug, string Title, string Body, string Kind, int SortOrder);
 
+internal sealed record HomepageSectionDto(
+    string Slug,
+    string? Title,
+    string? Body,
+    string? ImageUrl,
+    string? CtaLabel,
+    string? CtaHref,
+    int SortOrder);
+
+internal sealed record NavigationItemDto(
+    string MenuKey,
+    string Label,
+    string Href,
+    int SortOrder,
+    string? ParentKey);
+
 internal sealed record PriceQuoteRequest(
     string? RetreatSlug,
     string? ProgrammeSlug,

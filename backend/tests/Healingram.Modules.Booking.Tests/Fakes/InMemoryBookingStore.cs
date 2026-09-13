@@ -54,4 +54,24 @@ internal sealed class InMemoryBookingStore : IBookingStore
         entity.Status = BookingStatuses.Paid;
         return Task.FromResult(true);
     }
+
+    public Task<bool> TryTransitionStatusAsync(
+        Guid bookingId,
+        string fromStatus,
+        string toStatus,
+        string eventType,
+        DateTimeOffset occurredAt,
+        CancellationToken cancellationToken)
+    {
+        _ = eventType;
+        _ = occurredAt;
+        var entity = _items.FirstOrDefault(i => i.Id == bookingId);
+        if (entity is null || !string.Equals(entity.Status, fromStatus, StringComparison.Ordinal))
+        {
+            return Task.FromResult(false);
+        }
+
+        entity.Status = toStatus;
+        return Task.FromResult(true);
+    }
 }

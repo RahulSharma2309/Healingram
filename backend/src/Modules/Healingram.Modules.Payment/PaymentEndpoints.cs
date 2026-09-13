@@ -139,7 +139,12 @@ internal static class PaymentEndpoints
         => new
         {
             id = entity.Id,
+            bookingId = entity.BookingId,
             status = entity.Status,
+            amount = entity.AmountInr,
+            currency = entity.Currency,
+            provider = entity.Provider,
+            providerRef = entity.ProviderRef,
             checkoutUrl = string.Equals(entity.Status, PaymentStatuses.Ready, StringComparison.Ordinal)
                 ? $"/pay/local/{entity.Id}"
                 : null

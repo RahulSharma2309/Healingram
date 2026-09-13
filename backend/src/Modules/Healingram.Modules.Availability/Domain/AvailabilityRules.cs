@@ -14,6 +14,7 @@ internal static class AvailabilityActions
     public const string Alternative = "alternative";
     public const string Unavailable = "unavailable";
     public const string AcceptAlternative = "accept-alternative";
+    public const string Cancel = "cancel";
 }
 
 internal static class StatusMachine
@@ -22,7 +23,8 @@ internal static class StatusMachine
         => status is AvailabilityStatuses.Requested
             or AvailabilityStatuses.Confirmed
             or AvailabilityStatuses.AlternativeOffered
-            or AvailabilityStatuses.Unavailable;
+            or AvailabilityStatuses.Unavailable
+            or AvailabilityStatuses.Cancelled;
 
     public static bool CanTransition(string from, string to, string action)
     {
@@ -38,6 +40,9 @@ internal static class StatusMachine
             (AvailabilityStatuses.Requested, AvailabilityStatuses.Unavailable, AvailabilityActions.Unavailable) => true,
             (AvailabilityStatuses.AlternativeOffered, AvailabilityStatuses.Confirmed, AvailabilityActions.AcceptAlternative) => true,
             (AvailabilityStatuses.AlternativeOffered, AvailabilityStatuses.Unavailable, AvailabilityActions.Unavailable) => true,
+            (AvailabilityStatuses.Requested, AvailabilityStatuses.Cancelled, AvailabilityActions.Cancel) => true,
+            (AvailabilityStatuses.AlternativeOffered, AvailabilityStatuses.Cancelled, AvailabilityActions.Cancel) => true,
+            (AvailabilityStatuses.Confirmed, AvailabilityStatuses.Cancelled, AvailabilityActions.Cancel) => true,
             _ => false
         };
     }
@@ -66,9 +71,13 @@ internal sealed record ValidatedStay(
     string Occupancy,
     int Guests,
     string CheckIn,
+    string CheckOut,
     string CustomerName,
     string Email,
-    string Phone);
+    string Phone,
+    string? Source = null,
+    string? CountryCode = null,
+    string? CustomerNotes = null);
 
 internal static class StayRules
 {
@@ -152,14 +161,19 @@ internal static class StayRules
             return details;
         }
 
+        var checkOut = DateOnly.ParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture)
+            .AddDays(durationNights!.Value)
+            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
         stay = new ValidatedStay(
             key,
             retreat,
             programme,
-            durationNights!.Value,
+            durationNights.Value,
             occ,
             guests!.Value,
             date,
+            checkOut,
             name,
             mail,
             rawPhone);
@@ -196,6 +210,7 @@ internal static class StayRules
         var occupancy = snapshot?["occupancy"]?.GetValue<string>() ?? "";
         var guests = snapshot?["guests"]?.GetValue<int>() ?? 0;
         var checkIn = snapshot?["checkIn"]?.GetValue<string>() ?? "";
+        var checkOut = snapshot?["checkOut"]?.GetValue<string>() ?? "";
         var retreat = string.IsNullOrWhiteSpace(retreatSlug)
             ? snapshot?["retreatSlug"]?.GetValue<string>() ?? ""
             : retreatSlug;
@@ -211,6 +226,7 @@ internal static class StayRules
             occupancy,
             guests,
             checkIn,
+            checkOut,
             customerName,
             email,
             phone));
@@ -226,6 +242,7 @@ internal static class PriceSnapshotFactory
             ["retreatSlug"] = stay.RetreatSlug,
             ["programmeSlug"] = stay.ProgrammeSlug,
             ["checkIn"] = stay.CheckIn,
+            ["checkOut"] = stay.CheckOut,
             ["durationNights"] = stay.DurationNights,
             ["occupancy"] = stay.Occupancy,
             ["guests"] = stay.Guests,
@@ -250,6 +267,7 @@ internal static class PriceSnapshotFactory
         node["retreatSlug"] = stay.RetreatSlug;
         node["programmeSlug"] = stay.ProgrammeSlug;
         node["checkIn"] = stay.CheckIn;
+        node["checkOut"] = stay.CheckOut;
         node["durationNights"] = stay.DurationNights;
         node["occupancy"] = stay.Occupancy;
         node["guests"] = stay.Guests;
@@ -262,6 +280,50 @@ internal static class PriceSnapshotFactory
         node["totalAmount"] = quote.TotalAmount is { } total ? JsonValue.Create(total) : null;
         node["capturedAt"] = capturedAt.ToUniversalTime().ToString("O");
         node["roomType"] = stay.Occupancy;
+        return node.ToJsonString(AvailabilityJson.Options);
+    }
+
+    public static string Enrich(
+        string snapshotJson,
+        CatalogStayLabels? labels,
+        ValidatedStay stay,
+        string? source,
+        string? countryCode,
+        string? customerNotes,
+        string? settlementMode)
+    {
+        var node = JsonNode.Parse(snapshotJson) as JsonObject ?? [];
+        node["checkOut"] = stay.CheckOut;
+        if (labels is not null)
+        {
+            node["retreatName"] = labels.RetreatName;
+            node["programmeName"] = labels.ProgrammeName;
+            if (!string.IsNullOrWhiteSpace(labels.SettlementMode))
+            {
+                node["settlementMode"] = labels.SettlementMode;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(settlementMode) && node["settlementMode"] is null)
+        {
+            node["settlementMode"] = settlementMode;
+        }
+
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            node["source"] = source;
+        }
+
+        if (!string.IsNullOrWhiteSpace(countryCode))
+        {
+            node["countryCode"] = countryCode;
+        }
+
+        if (!string.IsNullOrWhiteSpace(customerNotes))
+        {
+            node["customerNotes"] = customerNotes;
+        }
+
         return node.ToJsonString(AvailabilityJson.Options);
     }
 }

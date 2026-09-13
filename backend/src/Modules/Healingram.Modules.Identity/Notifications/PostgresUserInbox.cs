@@ -33,8 +33,15 @@ internal sealed class PostgresUserInbox(IConfiguration configuration) : IUserInb
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<UserInboxItem>> ListForUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 20)
     {
+        var safePage = page < 1 ? 1 : page;
+        var safeSize = pageSize is < 1 or > 100 ? 20 : pageSize;
+        var offset = (safePage - 1) * safeSize;
         await using var connection = Open();
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
@@ -43,10 +50,12 @@ internal sealed class PostgresUserInbox(IConfiguration configuration) : IUserInb
             FROM notifications.inbox
             WHERE user_id = $1
             ORDER BY created_at DESC
-            LIMIT 100
+            LIMIT $2 OFFSET $3
             """,
             connection);
         command.Parameters.AddWithValue(userId);
+        command.Parameters.AddWithValue(safeSize);
+        command.Parameters.AddWithValue(offset);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var items = new List<UserInboxItem>();
         while (await reader.ReadAsync(cancellationToken))

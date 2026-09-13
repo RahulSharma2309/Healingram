@@ -42,6 +42,8 @@ internal sealed class InMemoryCatalogStore : ICatalogStore
     public List<DestinationRecord> Destinations { get; } = [];
     public List<CatalogQuoteRecord> Quotes { get; } = [];
     public List<ContentPageRecord> Pages { get; } = [];
+    public List<ContentSectionRecord> Sections { get; } = [];
+    public List<NavigationItemRecord> Navigation { get; } = [];
 
     public Task SeedPresentationAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -73,4 +75,12 @@ internal sealed class InMemoryCatalogStore : ICatalogStore
     public Task<ContentPageRecord?> GetPublishedContentAsync(string slug, CancellationToken cancellationToken)
         => Task.FromResult(Pages.FirstOrDefault(p =>
             p.Status == "published" && p.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase)));
+
+    public Task<IReadOnlyList<ContentSectionRecord>> ListSectionsAsync(string surface, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<ContentSectionRecord>>(
+            Sections.Where(s => s.Surface.Equals(surface, StringComparison.OrdinalIgnoreCase)).ToArray());
+
+    public Task<IReadOnlyList<NavigationItemRecord>> ListNavigationAsync(string menuKey, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<NavigationItemRecord>>(
+            Navigation.Where(i => i.MenuKey.Equals(menuKey, StringComparison.OrdinalIgnoreCase)).ToArray());
 }

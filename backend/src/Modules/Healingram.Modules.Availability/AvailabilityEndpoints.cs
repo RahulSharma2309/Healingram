@@ -32,7 +32,8 @@ internal static class AvailabilityEndpoints
             CancellationToken cancellationToken)
             => Handle(
                 service.GetAsync(publicId, ActorOf(user), includeInternalNotes: false, cancellationToken),
-                includeNotes: false));
+                includeNotes: false))
+            .RequireAuthorization();
 
         requests.MapPost("/{publicId}/confirm", (
             string publicId,
@@ -63,6 +64,14 @@ internal static class AvailabilityEndpoints
             => Handle(service.MarkUnavailableAsync(publicId, body, ActorOf(user), cancellationToken), includeNotes: false))
             .RequireAuthorization(IdentityPolicies.PartnerWrite);
 
+        requests.MapPost("/{publicId}/cancel", (
+            string publicId,
+            AvailabilityService service,
+            ClaimsPrincipal user,
+            CancellationToken cancellationToken)
+            => Handle(service.CancelAsync(publicId, ActorOf(user), cancellationToken), includeNotes: false))
+            .RequireAuthorization();
+
         requests.MapPost("/{publicId}/accept-alternative", (
             string publicId,
             AvailabilityService service,
@@ -74,6 +83,8 @@ internal static class AvailabilityEndpoints
         app.MapGet("/api/availability/mine", async (
             AvailabilityService service,
             ClaimsPrincipal user,
+            int? page,
+            int? pageSize,
             CancellationToken cancellationToken) =>
         {
             var actor = ActorOf(user);
@@ -86,7 +97,7 @@ internal static class AvailabilityEndpoints
             }
 
             var items = await service.ListMineAsync(actor, cancellationToken);
-            return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: false)) }, Json);
+            return Paged(items, page, pageSize, includeNotes: false);
         }).RequireAuthorization().WithTags("Availability");
 
         app.MapGet("/api/guest/requests/{publicId}", (
@@ -118,18 +129,22 @@ internal static class AvailabilityEndpoints
         app.MapGet("/api/partner/availability", async (
             AvailabilityService service,
             ClaimsPrincipal user,
+            int? page,
+            int? pageSize,
             CancellationToken cancellationToken) =>
         {
             var items = await service.ListPartnerPendingAsync(ActorOf(user), cancellationToken);
-            return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: false)) }, Json);
+            return Paged(items, page, pageSize, includeNotes: false);
         }).RequireAuthorization(IdentityPolicies.PartnerWrite).WithTags("Partners");
 
         app.MapGet("/api/admin/availability", async (
             AvailabilityService service,
+            int? page,
+            int? pageSize,
             CancellationToken cancellationToken) =>
         {
             var items = await service.ListAdminPendingAsync(cancellationToken);
-            return Results.Json(new { items = items.Select(e => ToDto(e, includeNotes: true)) }, Json);
+            return Paged(items, page, pageSize, includeNotes: true);
         }).RequireAuthorization(IdentityPolicies.AdminRequestsRead).WithTags("Admin");
 
         app.MapPost("/api/admin/availability/{publicId}/note", (
@@ -170,9 +185,23 @@ internal static class AvailabilityEndpoints
         };
     }
 
+    private static IResult Paged(
+        IReadOnlyList<AvailabilityRequestEntity> items,
+        int? page,
+        int? pageSize,
+        bool includeNotes)
+    {
+        var pageResult = Healingram.BuildingBlocks.Api.PageResult<object>.Create(
+            items.Select(e => ToDto(e, includeNotes)).ToArray(),
+            page,
+            pageSize);
+        return Results.Json(pageResult, Json);
+    }
+
     internal static object ToDto(AvailabilityRequestEntity entity, bool includeNotes)
     {
         using var snapshot = JsonDocument.Parse(entity.SnapshotJson);
+        var snap = snapshot.RootElement;
         object? alternative = null;
         if (!string.IsNullOrWhiteSpace(entity.AlternativeJson))
         {
@@ -184,12 +213,26 @@ internal static class AvailabilityEndpoints
         {
             ["publicId"] = entity.PublicId,
             ["status"] = entity.Status,
-            ["snapshot"] = snapshot.RootElement.Clone(),
+            ["snapshot"] = snap.Clone(),
             ["customerName"] = entity.CustomerName,
             ["email"] = entity.CustomerEmail,
             ["phone"] = entity.CustomerPhone,
+            ["customerUserId"] = entity.CustomerUserId,
             ["retreatSlug"] = entity.RetreatSlug,
             ["programmeSlug"] = entity.ProgrammeSlug,
+            ["retreatName"] = ReadString(snap, "retreatName"),
+            ["programmeName"] = ReadString(snap, "programmeName"),
+            ["checkIn"] = ReadString(snap, "checkIn"),
+            ["checkOut"] = ReadString(snap, "checkOut"),
+            ["durationNights"] = ReadInt(snap, "durationNights"),
+            ["occupancy"] = ReadString(snap, "occupancy"),
+            ["guests"] = ReadInt(snap, "guests"),
+            ["source"] = ReadString(snap, "source"),
+            ["settlementMode"] = ReadString(snap, "settlementMode"),
+            ["countryCode"] = ReadString(snap, "countryCode"),
+            ["customerNotes"] = ReadString(snap, "customerNotes"),
+            ["inventoryHoldId"] = entity.InventoryHoldId,
+            ["bookingNumber"] = entity.BookingNumber,
             ["requestedAt"] = entity.RequestedAt,
             ["partnerViewedAt"] = entity.PartnerViewedAt,
             ["partnerRespondedAt"] = entity.PartnerRespondedAt,
@@ -216,6 +259,16 @@ internal static class AvailabilityEndpoints
 
         return dto;
     }
+
+    private static string? ReadString(JsonElement snap, string name)
+        => snap.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static int? ReadInt(JsonElement snap, string name)
+        => snap.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var parsed)
+            ? parsed
+            : null;
 
     internal static Actor ActorOf(ClaimsPrincipal user)
     {

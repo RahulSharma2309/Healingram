@@ -15,9 +15,15 @@ export function SearchBar({
   const [category, setCategory] = useState("");
   const [dates, setDates] = useState("");
   const [needs, setNeeds] = useState<CatalogNeed[]>([]);
+  const [needsError, setNeedsError] = useState(false);
 
   useEffect(() => {
-    fetchNeeds().then(setNeeds).catch(() => setNeeds([]));
+    fetchNeeds()
+      .then((items) => {
+        setNeeds(items);
+        setNeedsError(false);
+      })
+      .catch(() => setNeedsError(true));
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -53,7 +59,7 @@ export function SearchBar({
             onChange={(e) => setCategory(e.target.value)}
             className="w-full outline-none text-sm text-sage-800 bg-transparent"
           >
-            <option value="">What are you seeking?</option>
+            <option value="">{needsError ? "Categories unavailable" : "What are you seeking?"}</option>
             {needs.map((need) => (
               <option key={need.slug} value={need.slug}>
                 {need.label}

@@ -12,7 +12,7 @@ import { formatDisplayDate } from "../../lib/pricing";
 export function MyRequest() {
   const { requestId } = useParams();
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<"verify" | "loading" | "list" | "empty">(
+  const [phase, setPhase] = useState<"verify" | "loading" | "list" | "empty" | "error">(
     isLoggedIn() || hasRequestSession() ? "loading" : "verify",
   );
   const [requests, setRequests] = useState<AvailabilityRequest[]>([]);
@@ -32,7 +32,7 @@ export function MyRequest() {
       }
       setPhase(mapped.length > 0 ? "list" : "empty");
     } catch {
-      setPhase("verify");
+      setPhase("error");
     }
   };
 
@@ -77,6 +77,17 @@ export function MyRequest() {
     return (
       <div className="max-w-md mx-auto px-4 py-16 text-center">
         <p className="text-sm text-sage-600">Looking up your requests…</p>
+      </div>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <div className="max-w-md mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800">Could not load your requests</h1>
+        <button type="button" className="mt-6 text-teal-600 font-medium" onClick={() => void loadMine()}>
+          Try again
+        </button>
       </div>
     );
   }

@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import { collectPages, type PageResult } from "./pages";
 
 export type CatalogNeed = {
   slug: string;
@@ -89,9 +90,12 @@ export async function fetchRetreats(query: {
   if (query.state) params.set("state", query.state);
   if (query.locality) params.set("locality", query.locality);
   if (query.duration) params.set("duration", query.duration);
-  const qs = params.toString();
-  const data = await apiFetch<{ items: RetreatCard[] }>(`/api/catalog/retreats${qs ? `?${qs}` : ""}`);
-  return data.items ?? [];
+  return collectPages(async (page, pageSize) => {
+    const next = new URLSearchParams(params);
+    next.set("page", String(page));
+    next.set("pageSize", String(pageSize));
+    return apiFetch<PageResult<RetreatCard>>(`/api/catalog/retreats?${next}`);
+  });
 }
 
 export type ListingPriceStatus = "VERIFIED" | "ESTIMATED" | "ON_REQUEST";
@@ -190,6 +194,36 @@ export async function fetchContentPages(kind?: string): Promise<ContentPage[]> {
 
 export async function fetchContentPage(slug: string): Promise<ContentPage> {
   return apiFetch<ContentPage>(`/api/content/pages/${encodeURIComponent(slug)}`);
+}
+
+export type HomepageSection = {
+  slug: string;
+  title?: string | null;
+  body?: string | null;
+  imageUrl?: string | null;
+  ctaLabel?: string | null;
+  ctaHref?: string | null;
+  sortOrder: number;
+};
+
+export type NavigationItem = {
+  menuKey: string;
+  label: string;
+  href: string;
+  sortOrder: number;
+  parentKey?: string | null;
+};
+
+export async function fetchHomepage(): Promise<HomepageSection[]> {
+  const data = await apiFetch<{ sections: HomepageSection[] }>("/api/content/homepage");
+  return data.sections ?? [];
+}
+
+export async function fetchNavigation(menu: string): Promise<NavigationItem[]> {
+  const data = await apiFetch<{ items: NavigationItem[] }>(
+    `/api/content/navigation?menu=${encodeURIComponent(menu)}`,
+  );
+  return data.items ?? [];
 }
 
 export async function fetchPlatformSettings(): Promise<Record<string, string>> {

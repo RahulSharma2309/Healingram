@@ -100,6 +100,20 @@ public class RetreatSearchTests
     }
 
     [Fact]
+    public async Task Comma_separated_need_and_state_filters_are_server_owned()
+    {
+        var catalog = new CatalogQueryService(SeededStore());
+
+        var items = await catalog.SearchRetreatsAsync(
+            new RetreatSearchQuery("weight-metabolic,yoga_meditation", "karnataka,kerala", null, null),
+            CancellationToken.None);
+
+        Assert.NotEmpty(items);
+        Assert.All(items, card => Assert.True(
+            card.StateSlug is "karnataka" or "kerala"));
+    }
+
+    [Fact]
     public async Task Public_slugs_port_matches_published_search()
     {
         var catalog = new CatalogQueryService(SeededStore());

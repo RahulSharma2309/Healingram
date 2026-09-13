@@ -47,7 +47,10 @@ export function HeroDiscovery() {
         );
       })
       .catch(() => {
-        if (!cancelled) setOptions([]);
+        if (!cancelled) {
+          setOptions([]);
+          setError("Could not load matching options. Check the catalog API and refresh.");
+        }
       });
     return () => {
       cancelled = true;

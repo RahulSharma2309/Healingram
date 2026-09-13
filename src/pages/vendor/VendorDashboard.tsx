@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchPartnerQueue } from "../../lib/api/availability";
 import {
   isAgingRequest,
-  listAvailabilityRequests,
-  markPartnerViewed,
-  mergeServerAvailabilityList,
   partnerConfirmAvailability,
   partnerMarkUnavailable,
   partnerSuggestAlternative,
+  refreshPartnerRequests,
   requestAgeLabel,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
@@ -25,10 +22,8 @@ export function VendorDashboard() {
   const [partner, setPartner] = useState<PartnerMe | null>(null);
 
   const refresh = async () => {
-    setRequests(listAvailabilityRequests());
     try {
-      mergeServerAvailabilityList(await fetchPartnerQueue());
-      setRequests(listAvailabilityRequests());
+      setRequests(await refreshPartnerRequests());
       setQueueError(null);
     } catch {
       setQueueError("Could not load the partner queue from the server. Sign in as the partner on this browser.");
@@ -36,11 +31,10 @@ export function VendorDashboard() {
   };
 
   useEffect(() => {
-    refresh();
-    fetchPartnerMe().then(setPartner).catch(() => setPartner(null));
-    const onChange = () => refresh();
-    window.addEventListener("healingram-requests", onChange);
-    return () => window.removeEventListener("healingram-requests", onChange);
+    void refresh();
+    fetchPartnerMe()
+      .then(setPartner)
+      .catch(() => setPartner(null));
   }, []);
 
   const pending = useMemo(
@@ -101,7 +95,6 @@ export function VendorDashboard() {
                       type="button"
                       className="px-3 py-1.5 rounded-lg bg-teal-600 text-white text-xs font-semibold"
                       onClick={() => {
-                        markPartnerViewed(r.requestId);
                         setActiveId(r.requestId);
                         setAction("confirm");
                       }}
@@ -112,7 +105,6 @@ export function VendorDashboard() {
                       type="button"
                       className="px-3 py-1.5 rounded-lg border border-sand-200 text-xs font-semibold"
                       onClick={() => {
-                        markPartnerViewed(r.requestId);
                         setActiveId(r.requestId);
                         setAction("alternative");
                       }}
@@ -203,16 +195,16 @@ function ConfirmForm({
   onCancel: () => void;
 }) {
   const [finalAmount, setFinalAmount] = useState(
-    String(request.finalPayableAmount ?? request.priceSnapshot.totalAmount ?? ""),
+    String(request.finalPayableAmount ?? request.priceSnapshot?.totalAmount ?? ""),
   );
   const [taxesNote, setTaxesNote] = useState(
-    request.priceSnapshot.taxDisplay === "included"
+    request.priceSnapshot?.taxDisplay === "included"
       ? "Taxes included"
       : "Taxes not yet confirmed",
   );
   const [inclusionsNote, setInclusionsNote] = useState("Programme inclusions as discussed");
-  const [roomType, setRoomType] = useState(request.roomType);
-  const [occupancy, setOccupancy] = useState(request.occupancy);
+  const [roomType, setRoomType] = useState(request.roomType ?? "");
+  const [occupancy, setOccupancy] = useState(request.occupancy ?? "");
 
   return (
     <section className="bg-white rounded-xl border border-teal-200 p-6 space-y-3">
@@ -272,11 +264,11 @@ function ConfirmForm({
             if (!amount || amount <= 0) return;
             void partnerConfirmAvailability(request.requestId, {
               programmeId: request.programmeId,
-              programmeName: request.programmeName,
-              checkIn: request.checkIn,
-              checkOut: request.checkOut,
-              durationNights: request.durationNights,
-              guests: request.guests,
+              programmeName: request.programmeName ?? "",
+              checkIn: request.checkIn ?? "",
+              checkOut: request.checkOut ?? "",
+              durationNights: request.durationNights ?? 0,
+              guests: request.guests ?? 0,
               occupancy,
               roomType,
               finalAmount: amount,
@@ -310,11 +302,11 @@ function AlternativeForm({
   onDone: () => void;
   onCancel: () => void;
 }) {
-  const [checkIn, setCheckIn] = useState(request.checkIn);
-  const [nights, setNights] = useState(String(request.durationNights));
-  const [roomType, setRoomType] = useState(request.roomType);
+  const [checkIn, setCheckIn] = useState(request.checkIn ?? "");
+  const [nights, setNights] = useState(String(request.durationNights ?? ""));
+  const [roomType, setRoomType] = useState(request.roomType ?? "");
   const [finalAmount, setFinalAmount] = useState(
-    String(request.finalPayableAmount ?? request.priceSnapshot.totalAmount ?? ""),
+    String(request.finalPayableAmount ?? request.priceSnapshot?.totalAmount ?? ""),
   );
 
   const checkOut = checkIn && nights ? addNights(checkIn, Number(nights)) : "";
@@ -368,12 +360,12 @@ function AlternativeForm({
             if (!checkIn || !checkOut || !durationNights) return;
             void partnerSuggestAlternative(request.requestId, {
               programmeId: request.programmeId,
-              programmeName: request.programmeName,
+              programmeName: request.programmeName ?? "",
               checkIn,
               checkOut,
               durationNights,
-              guests: request.guests,
-              occupancy: request.occupancy,
+              guests: request.guests ?? 0,
+              occupancy: request.occupancy ?? "",
               roomType,
               finalAmount: amount > 0 ? amount : null,
               taxesNote: "Taxes not yet confirmed",

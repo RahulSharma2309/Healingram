@@ -60,7 +60,7 @@ internal static class LeadsEndpoints
             LeadService service,
             CancellationToken cancellationToken)
             => Handle(service.GetAsync(id, cancellationToken)))
-            .RequireAuthorization(IdentityPolicies.AdminWrite);
+            .RequireAuthorization(IdentityPolicies.AdminLeadsRead);
     }
 
     internal static async Task<IResult> Handle(Task<LeadOutcome> action)

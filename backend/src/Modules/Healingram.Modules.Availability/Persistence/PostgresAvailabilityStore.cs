@@ -42,11 +42,13 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
                         INSERT INTO availability.requests (
                             id, public_id, customer_user_id, customer_name, customer_email, customer_phone,
                             retreat_id, programme_id, retreat_slug, programme_slug, status, price_snapshot,
-                            idempotency_key, requested_at, partner_viewed_at, partner_responded_at, final_amount_inr)
+                            idempotency_key, requested_at, partner_viewed_at, partner_responded_at, final_amount_inr,
+                            inventory_hold_id, booking_number)
                         VALUES (
                             @id, @publicId, @customerUserId, @customerName, @customerEmail, @customerPhone,
                             @retreatId, @programmeId, @retreatSlug, @programmeSlug, @status, @snapshot,
-                            @idempotencyKey, @requestedAt, @viewedAt, @respondedAt, @finalAmount)
+                            @idempotencyKey, @requestedAt, @viewedAt, @respondedAt, @finalAmount,
+                            @holdId, @bookingNumber)
                         """,
                         connection,
                         tx))
@@ -87,7 +89,8 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
                     SET status = @status,
                         partner_viewed_at = @viewedAt,
                         partner_responded_at = @respondedAt,
-                        final_amount_inr = @finalAmount
+                        final_amount_inr = @finalAmount,
+                        booking_number = COALESCE(@bookingNumber, booking_number)
                     WHERE id = @id
                       AND status = @expected
                     """,
@@ -98,6 +101,7 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
                     update.Parameters.AddWithValue("viewedAt", (object?)entity.PartnerViewedAt ?? DBNull.Value);
                     update.Parameters.AddWithValue("respondedAt", (object?)entity.PartnerRespondedAt ?? DBNull.Value);
                     update.Parameters.AddWithValue("finalAmount", (object?)entity.FinalAmountInr ?? DBNull.Value);
+                    update.Parameters.AddWithValue("bookingNumber", (object?)entity.BookingNumber ?? DBNull.Value);
                     update.Parameters.AddWithValue("id", entity.Id);
                     update.Parameters.AddWithValue("expected", expectedFromStatus);
                     updated = await update.ExecuteNonQueryAsync(ct);
@@ -252,6 +256,22 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task AttachBookingAsync(Guid requestId, string bookingNumber, CancellationToken cancellationToken)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            UPDATE availability.requests
+            SET booking_number = @bookingNumber
+            WHERE id = @id
+            """,
+            connection);
+        command.Parameters.AddWithValue("bookingNumber", bookingNumber);
+        command.Parameters.AddWithValue("id", requestId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private async Task<AvailabilityRequestEntity?> FindAsync(
         string whereSql,
         Action<NpgsqlCommand> bind,
@@ -384,7 +404,7 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
         r.id, r.public_id, r.customer_user_id, r.customer_name, r.customer_email, r.customer_phone,
         r.retreat_id, r.programme_id, r.retreat_slug, r.programme_slug, r.status, r.price_snapshot::text,
         r.idempotency_key, r.requested_at, r.partner_viewed_at, r.partner_responded_at, r.final_amount_inr,
-        a.proposal
+        a.proposal, r.inventory_hold_id, r.booking_number
         """;
 
     private static AvailabilityRequestEntity ReadEntity(NpgsqlDataReader reader)
@@ -407,7 +427,9 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
             PartnerViewedAt = reader.IsDBNull(14) ? null : reader.GetFieldValue<DateTimeOffset>(14),
             PartnerRespondedAt = reader.IsDBNull(15) ? null : reader.GetFieldValue<DateTimeOffset>(15),
             FinalAmountInr = reader.IsDBNull(16) ? null : reader.GetFieldValue<decimal>(16),
-            AlternativeJson = reader.IsDBNull(17) ? null : NormalizeJson(reader.GetString(17))
+            AlternativeJson = reader.IsDBNull(17) ? null : NormalizeJson(reader.GetString(17)),
+            InventoryHoldId = reader.IsDBNull(18) ? null : reader.GetGuid(18),
+            BookingNumber = reader.IsDBNull(19) ? null : reader.GetString(19)
         };
 
     private static void BindEntity(NpgsqlCommand command, AvailabilityRequestEntity entity)
@@ -429,6 +451,8 @@ internal sealed class PostgresAvailabilityStore(IConfiguration configuration) : 
         command.Parameters.AddWithValue("viewedAt", (object?)entity.PartnerViewedAt ?? DBNull.Value);
         command.Parameters.AddWithValue("respondedAt", (object?)entity.PartnerRespondedAt ?? DBNull.Value);
         command.Parameters.AddWithValue("finalAmount", (object?)entity.FinalAmountInr ?? DBNull.Value);
+        command.Parameters.AddWithValue("holdId", (object?)entity.InventoryHoldId ?? DBNull.Value);
+        command.Parameters.AddWithValue("bookingNumber", (object?)entity.BookingNumber ?? DBNull.Value);
     }
 
     private static string NormalizeJson(string json)

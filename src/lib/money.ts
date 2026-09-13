@@ -30,7 +30,7 @@ export function addNights(checkIn: string, nights: number): string {
   return `${y}-${m}-${day}`;
 }
 
-export function formatDisplayDate(iso: string): string {
+export function formatDisplayDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(`${iso}T12:00:00`);
   return d.toLocaleDateString("en-IN", {

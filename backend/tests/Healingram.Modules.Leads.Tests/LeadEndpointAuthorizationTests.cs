@@ -23,7 +23,7 @@ public class LeadEndpointAuthorizationTests
             .Select(a => a.Policy)
             .ToArray();
 
-        Assert.Contains(IdentityPolicies.AdminWrite, policies);
+        Assert.Contains(IdentityPolicies.AdminLeadsRead, policies);
     }
 
     [Fact]

@@ -19,14 +19,13 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "../lib/auth/AuthProvider";
-import { fetchThemes } from "../lib/api/catalog";
+import { fetchPlaces, fetchThemes } from "../lib/api/catalog";
 import {
   buildDestinationsMenuFromPlaces,
   buildRetreatTypesMenu,
   getHeaderItem,
   type NavLinkItem,
 } from "../navigation/headerConfig";
-import { usePublishedRetreats } from "../lib/api/usePublishedRetreats";
 import healingramMark from "../assets/healingram-mark.png";
 
 function WhatsAppIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -76,6 +75,7 @@ function useAuthState() {
 function NavDropdown({
   label,
   items,
+  error,
   open,
   onOpen,
   onClose,
@@ -84,6 +84,7 @@ function NavDropdown({
 }: {
   label: string;
   items: NavLinkItem[];
+  error?: string | null;
   open: boolean;
   onOpen: () => void;
   onClose: () => void;
@@ -95,7 +96,7 @@ function NavDropdown({
   const rootRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const closeTimer = useRef<number | null>(null);
-  const hasMenu = items.length > 0;
+  const hasMenu = items.length > 0 || Boolean(error);
   const sections = groupNavItems(items);
   const anyActive = items.some((item) => isNavItemActive(item.to, pathname, search));
 
@@ -257,7 +258,7 @@ function NavDropdown({
         </button>
         {open && (
           <div id={id} role="menu" className="pb-3 pl-1 flex flex-col gap-0.5" onKeyDown={onMenuKeyDown}>
-            {renderSections(true)}
+            {error ? <p className="px-2 py-2 text-sm text-red-700">{error}</p> : renderSections(true)}
           </div>
         )}
       </div>
@@ -297,7 +298,7 @@ function NavDropdown({
           onMouseEnter={clearCloseTimer}
         >
           <div className="min-w-[260px] rounded-xl border border-sand-200 bg-white py-2 shadow-lg">
-            {renderSections(false)}
+            {error ? <p className="px-4 py-2 text-sm text-red-700">{error}</p> : renderSections(false)}
           </div>
         </div>
       )}
@@ -414,6 +415,9 @@ export function CustomerHeader() {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const [mobileSection, setMobileSection] = useState<OpenMenu>(null);
   const [typeItems, setTypeItems] = useState<NavLinkItem[]>([]);
+  const [destinationItems, setDestinationItems] = useState<NavLinkItem[]>([]);
+  const [typeError, setTypeError] = useState<string | null>(null);
+  const [destinationError, setDestinationError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const item1 = getHeaderItem(1);
@@ -425,17 +429,31 @@ export function CustomerHeader() {
   const item8 = getHeaderItem(8);
   const item9 = getHeaderItem(9);
 
-  const { places } = usePublishedRetreats();
-  const destinationItems = buildDestinationsMenuFromPlaces(places);
-
   useEffect(() => {
     let cancelled = false;
     fetchThemes()
       .then((themes) => {
-        if (!cancelled) setTypeItems(buildRetreatTypesMenu(themes));
+        if (cancelled) return;
+        setTypeItems(buildRetreatTypesMenu(themes));
+        setTypeError(null);
       })
       .catch(() => {
-        if (!cancelled) setTypeItems([]);
+        if (!cancelled) {
+          setTypeItems([]);
+          setTypeError("Could not load retreat types.");
+        }
+      });
+    fetchPlaces()
+      .then((places) => {
+        if (cancelled) return;
+        setDestinationItems(buildDestinationsMenuFromPlaces(places));
+        setDestinationError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDestinationItems([]);
+          setDestinationError("Could not load destinations.");
+        }
       });
     return () => {
       cancelled = true;
@@ -588,6 +606,7 @@ export function CustomerHeader() {
           <NavDropdown
             label={item3.label}
             items={typeItems}
+            error={typeError}
             open={openMenu === "types"}
             onOpen={() => setOpenMenu("types")}
             onClose={() => setOpenMenu((m) => (m === "types" ? null : m))}
@@ -595,6 +614,7 @@ export function CustomerHeader() {
           <NavDropdown
             label={item4.label}
             items={destinationItems}
+            error={destinationError}
             open={openMenu === "destinations"}
             onOpen={() => setOpenMenu("destinations")}
             onClose={() => setOpenMenu((m) => (m === "destinations" ? null : m))}
@@ -665,6 +685,7 @@ export function CustomerHeader() {
           <NavDropdown
             label={item3.label}
             items={typeItems}
+            error={typeError}
             open={mobileSection === "types"}
             onOpen={() => setMobileSection("types")}
             onClose={() => setMobileSection((s) => (s === "types" ? null : s))}
@@ -674,6 +695,7 @@ export function CustomerHeader() {
           <NavDropdown
             label={item4.label}
             items={destinationItems}
+            error={destinationError}
             open={mobileSection === "destinations"}
             onOpen={() => setMobileSection("destinations")}
             onClose={() => setMobileSection((s) => (s === "destinations" ? null : s))}

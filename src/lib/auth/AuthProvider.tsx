@@ -46,7 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(next);
       setSessionUser(next);
       if (next.accountStatus !== "guest") {
-        await hydrateWishlistFromServer();
+        try {
+          await hydrateWishlistFromServer();
+        } catch {
+          /* wishlist is not session-critical */
+        }
       }
       return next;
     } catch {

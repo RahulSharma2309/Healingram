@@ -213,7 +213,7 @@ export function AvailabilityRequestModal({
         quoteId: quote.quoteId,
       });
       onClose();
-      navigate(`/requests/${request.requestId}/received`);
+      navigate(`/requests/${request.requestId}/received`, { state: { request } });
     } catch (err) {
       setError(apiErrorMessage(err));
     } finally {

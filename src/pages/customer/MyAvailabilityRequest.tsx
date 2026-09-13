@@ -5,8 +5,7 @@ import { getAvailabilityByPublicId } from "../../lib/api/availability";
 import { isRegisteredAccount } from "../../lib/auth";
 import {
   customerAcceptAlternative,
-  getAvailabilityRequest,
-  mergeServerAvailability,
+  toAvailabilityRequest,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
@@ -16,31 +15,14 @@ export function MyAvailabilityRequest() {
   const { requestId } = useParams();
   const navigate = useNavigate();
   const [request, setRequest] = useState<AvailabilityRequest | undefined>();
-  const [lookup, setLookup] = useState<"loading" | "ready" | "missing">("loading");
+  const [lookup, setLookup] = useState<"loading" | "ready" | "missing" | "error">("loading");
 
-  const refresh = () => {
+  const load = () => {
     if (!requestId) return;
-    const local = getAvailabilityRequest(requestId);
-    if (local) setRequest(local);
-  };
-
-  useEffect(() => {
-    if (!requestId) {
-      setLookup("missing");
-      return;
-    }
-
-    const local = getAvailabilityRequest(requestId);
-    if (local) {
-      setRequest(local);
-      setLookup("ready");
-    } else {
-      setLookup("loading");
-    }
-
+    setLookup("loading");
     getAvailabilityByPublicId(requestId)
       .then((dto) => {
-        setRequest(mergeServerAvailability(dto));
+        setRequest(toAvailabilityRequest(dto));
         setLookup("ready");
       })
       .catch((error) => {
@@ -48,22 +30,33 @@ export function MyAvailabilityRequest() {
           navigate(`/requests/${requestId}/verify`, { replace: true });
           return;
         }
-        setLookup(getAvailabilityRequest(requestId) ? "ready" : "missing");
+        setLookup(error instanceof ApiError && error.status === 404 ? "missing" : "error");
       });
+  };
 
-    const onChange = () => refresh();
-    window.addEventListener("healingram-requests", onChange);
-    window.addEventListener("storage", onChange);
-    return () => {
-      window.removeEventListener("healingram-requests", onChange);
-      window.removeEventListener("storage", onChange);
-    };
+  useEffect(() => {
+    if (!requestId) {
+      setLookup("missing");
+      return;
+    }
+    load();
   }, [requestId]);
 
   if (lookup === "loading") {
     return (
       <div className="max-w-lg mx-auto px-4 py-16 text-center">
         <p className="text-sm text-sage-600">Looking up your availability request…</p>
+      </div>
+    );
+  }
+
+  if (lookup === "error") {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <h1 className="font-display text-2xl font-bold text-sage-800">Could not load this request</h1>
+        <button type="button" className="mt-6 text-teal-600 font-medium" onClick={load}>
+          Try again
+        </button>
       </div>
     );
   }
@@ -155,8 +148,7 @@ export function MyAvailabilityRequest() {
               type="button"
               className="rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white"
               onClick={() => {
-                customerAcceptAlternative(request.requestId);
-                refresh();
+                void customerAcceptAlternative(request.requestId).then(setRequest);
               }}
             >
               Accept this option
@@ -252,22 +244,23 @@ function Summary({
   amount,
 }: {
   request: AvailabilityRequest;
-  amount: string;
+  amount: string | null;
 }) {
   return (
     <div className="mt-6 rounded-2xl border border-sand-200 bg-white p-5 text-sm text-sage-700 space-y-2">
-      <p className="font-semibold text-sage-800">{request.retreatName}</p>
-      <p>{request.programmeName}</p>
+      <p className="font-semibold text-sage-800">{request.retreatName ?? request.retreatId}</p>
+      <p>{request.programmeName ?? request.programmeId}</p>
       <p>
         {formatDisplayDate(request.checkIn)} → {formatDisplayDate(request.checkOut)}
       </p>
       <p>
-        {request.guests} guest{request.guests === 1 ? "" : "s"} · {request.roomType}
+        {request.guests ?? "—"} guest{(request.guests ?? 0) === 1 ? "" : "s"} · {request.roomType ?? "—"}
       </p>
-      <p className="pt-2 text-lg font-semibold text-sage-800">{amount} total</p>
+      <p className="pt-2 text-lg font-semibold text-sage-800">{amount ?? "—"} total</p>
       <p className="text-xs text-sage-500">
-        Price snapshot at request: {request.priceSnapshot.label} (captured{" "}
-        {new Date(request.priceSnapshot.capturedAt).toLocaleString("en-IN")})
+        {request.priceSnapshot
+          ? `Price snapshot at request: ${request.priceSnapshot.label} (captured ${new Date(request.priceSnapshot.capturedAt).toLocaleString("en-IN")})`
+          : "Price snapshot was not returned by the server."}
       </p>
     </div>
   );

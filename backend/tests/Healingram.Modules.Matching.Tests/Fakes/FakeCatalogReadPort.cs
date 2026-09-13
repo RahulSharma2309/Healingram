@@ -13,6 +13,27 @@ internal sealed class FakeCatalogReadPort : ICatalogReadPort
         CancellationToken cancellationToken)
         => Task.FromResult<IReadOnlyList<PublishedRetreatMatchCard>>(Published.ToArray());
 
+    public Task<CatalogStayLabels?> GetStayLabelsAsync(
+        string retreatSlug,
+        string programmeSlug,
+        CancellationToken cancellationToken)
+    {
+        var card = Published.FirstOrDefault(r => r.Slug.Equals(retreatSlug, StringComparison.OrdinalIgnoreCase));
+        if (card is null)
+        {
+            return Task.FromResult<CatalogStayLabels?>(null);
+        }
+
+        return Task.FromResult<CatalogStayLabels?>(new CatalogStayLabels(
+            Guid.NewGuid(),
+            card.Slug,
+            card.Slug,
+            Guid.NewGuid(),
+            programmeSlug,
+            programmeSlug,
+            null));
+    }
+
     public static PublishedRetreatMatchCard Card(
         string slug,
         string stateSlug,

@@ -22,6 +22,12 @@ internal sealed class BookingPaymentPort(
         return entity is null ? null : BookingSnapshot.ToGate(entity);
     }
 
+    public async Task<BookingPaymentGate?> FindByBookingIdAsync(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var entity = await store.FindByIdAsync(bookingId, cancellationToken);
+        return entity is null ? null : BookingSnapshot.ToGate(entity);
+    }
+
     public async Task<MarkPaidResult> MarkPaidAsync(Guid bookingId, CancellationToken cancellationToken)
     {
         using var activity = BookingTelemetry.Source.StartActivity("booking.mark_paid");

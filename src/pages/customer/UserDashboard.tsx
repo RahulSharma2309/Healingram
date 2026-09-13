@@ -3,10 +3,8 @@ import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Calendar, Heart, User } from "lucide-react";
 import { fetchTrips } from "../../lib/api/account";
 import {
-  listAvailabilityRequests,
-  listCustomerTrips,
-  mergeServerAvailability,
   refreshMyRequests,
+  toAvailabilityRequest,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
 import { formatDisplayDate } from "../../lib/pricing";
@@ -36,21 +34,26 @@ export function UserDashboard() {
   }, [searchParams]);
   const [trips, setTrips] = useState<AvailabilityRequest[]>([]);
   const [wishSlugs, setWishSlugs] = useState<string[]>([]);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [tripError, setTripError] = useState<string | null>(null);
+  const [wishlistError, setWishlistError] = useState<string | null>(null);
 
   useEffect(() => {
-    const refresh = () => {
-      setRequests(listAvailabilityRequests());
-      setTrips(listCustomerTrips());
-      setWishSlugs(listWishlistSlugs());
-    };
-    refresh();
     if (!isLoggedIn()) {
-      return () => {
-        window.removeEventListener("healingram-requests", refresh);
-      };
+      return;
     }
-    void hydrateWishlistFromServer().then(() => setWishSlugs(listWishlistSlugs()));
-    void refreshMyRequests().then(refresh).catch(() => undefined);
+    void hydrateWishlistFromServer()
+      .then(() => {
+        setWishSlugs(listWishlistSlugs());
+        setWishlistError(null);
+      })
+      .catch(() => setWishlistError("Could not load your wishlist."));
+    void refreshMyRequests()
+      .then((items) => {
+        setRequests(items);
+        setRequestError(null);
+      })
+      .catch(() => setRequestError("Could not load your requests."));
     void fetchTrips()
       .then((groups) => {
         const cards = [
@@ -59,25 +62,23 @@ export function UserDashboard() {
           ...groups.completed,
           ...groups.cancelled,
         ];
-        for (const card of cards) {
-          mergeServerAvailability({
-            publicId: card.publicId,
-            status: card.status,
-            retreatSlug: card.retreatSlug,
-            programmeSlug: card.programmeSlug,
-            requestedAt: card.requestedAt,
-            finalAmountInr: card.finalAmountInr,
-          });
-        }
-        refresh();
+        setTrips(
+          cards.map((card) =>
+            toAvailabilityRequest({
+              publicId: card.publicId,
+              status: card.status,
+              retreatSlug: card.retreatSlug,
+              programmeSlug: card.programmeSlug,
+              requestedAt: card.requestedAt,
+              finalAmountInr: card.finalAmountInr,
+            }),
+          ),
+        );
+        setTripError(null);
       })
-      .catch(() => {
-        /* local trips until GET /api/trips answers */
-      });
-    window.addEventListener("healingram-requests", refresh);
+      .catch(() => setTripError("Could not load your trips."));
     const unsubWish = subscribeWishlist(() => setWishSlugs(listWishlistSlugs()));
     return () => {
-      window.removeEventListener("healingram-requests", refresh);
       unsubWish();
     };
   }, []);
@@ -113,7 +114,8 @@ export function UserDashboard() {
       {tab === "requests" && (
         <div className="bg-white rounded-xl border border-sand-200 p-6 space-y-3">
           <h2 className="font-semibold mb-2">Availability requests</h2>
-          {requests.length === 0 && (
+          {requestError && <p className="text-sm text-red-700">{requestError}</p>}
+          {!requestError && requests.length === 0 && (
             <p className="text-sm text-sage-500">No requests yet. Check availability on a retreat listing.</p>
           )}
           {requests.map((r) => (
@@ -123,7 +125,7 @@ export function UserDashboard() {
             >
               <div>
                 <p className="font-mono text-xs text-teal-700">{r.requestId}</p>
-                <p className="font-medium">{r.retreatName}</p>
+                <p className="font-medium">{r.retreatName ?? r.retreatId}</p>
                 <p className="text-sm text-gray-500">
                   {r.programmeName} · {formatDisplayDate(r.checkIn)} →{" "}
                   {formatDisplayDate(r.checkOut)}
@@ -144,7 +146,8 @@ export function UserDashboard() {
       {tab === "trips" && (
         <div className="bg-white rounded-xl border border-sand-200 p-6 space-y-3">
           <h2 className="font-semibold mb-2">My Trips</h2>
-          {trips.length === 0 && (
+          {tripError && <p className="text-sm text-red-700">{tripError}</p>}
+          {!tripError && trips.length === 0 && (
             <p className="text-sm text-sage-500">
               Confirmed and payment-ready stays appear here after the retreat responds.
             </p>
@@ -155,7 +158,7 @@ export function UserDashboard() {
               className="border border-sand-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
               <div>
-                <p className="font-medium">{r.retreatName}</p>
+                <p className="font-medium">{r.retreatName ?? r.retreatId}</p>
                 <p className="text-sm text-gray-500">
                   {formatDisplayDate(r.checkIn)} → {formatDisplayDate(r.checkOut)}
                 </p>
@@ -182,7 +185,8 @@ export function UserDashboard() {
       {tab === "wishlist" && (
         <div className="bg-white rounded-xl border border-sand-200 p-6 space-y-3">
           <h2 className="font-semibold mb-2">Wishlist</h2>
-          {wishSlugs.length === 0 && (
+          {wishlistError ? <p className="text-sm text-red-700">{wishlistError}</p> : null}
+          {!wishlistError && wishSlugs.length === 0 && (
             <p className="text-sm text-sage-500">
               Save retreats from the browse page. Sign in to keep them after you change browsers.
             </p>
