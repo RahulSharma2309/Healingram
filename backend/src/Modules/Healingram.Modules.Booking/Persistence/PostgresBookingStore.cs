@@ -1,3 +1,4 @@
+using Healingram.BuildingBlocks.Persistence;
 using Healingram.Contracts.Booking;
 using Healingram.Modules.Booking.Application;
 using Microsoft.Extensions.Configuration;
@@ -57,54 +58,55 @@ internal sealed class PostgresBookingStore(IConfiguration configuration) : IBook
         return Convert.ToInt64(result);
     }
 
-    public async Task InsertAsync(BookingEntity entity, CancellationToken cancellationToken)
-    {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
-        try
-        {
-            await using (var insert = new NpgsqlCommand(
-                """
-                INSERT INTO booking.bookings (id, booking_number, request_id, status, snapshot, created_at)
-                VALUES (@id, @bookingNumber, @requestId, @status, @snapshot, @createdAt)
-                """,
-                connection,
-                tx))
+    public Task InsertAsync(BookingEntity entity, CancellationToken cancellationToken)
+        => PostgresWork.WriteAsync(
+            PostgresWork.ConnectionString(configuration),
+            async (connection, tx, ct) =>
             {
-                insert.Parameters.AddWithValue("id", entity.Id);
-                insert.Parameters.AddWithValue("bookingNumber", entity.BookingNumber);
-                insert.Parameters.AddWithValue("requestId", entity.RequestId);
-                insert.Parameters.AddWithValue("status", entity.Status);
-                insert.Parameters.Add(new NpgsqlParameter("snapshot", NpgsqlDbType.Jsonb) { Value = entity.SnapshotJson });
-                insert.Parameters.AddWithValue("createdAt", entity.CreatedAt);
-                await insert.ExecuteNonQueryAsync(cancellationToken);
-            }
+                try
+                {
+                    await using (var insert = new NpgsqlCommand(
+                        """
+                        INSERT INTO booking.bookings (id, booking_number, request_id, status, snapshot, created_at)
+                        VALUES (@id, @bookingNumber, @requestId, @status, @snapshot, @createdAt)
+                        """,
+                        connection,
+                        tx))
+                    {
+                        insert.Parameters.AddWithValue("id", entity.Id);
+                        insert.Parameters.AddWithValue("bookingNumber", entity.BookingNumber);
+                        insert.Parameters.AddWithValue("requestId", entity.RequestId);
+                        insert.Parameters.AddWithValue("status", entity.Status);
+                        insert.Parameters.Add(new NpgsqlParameter("snapshot", NpgsqlDbType.Jsonb) { Value = entity.SnapshotJson });
+                        insert.Parameters.AddWithValue("createdAt", entity.CreatedAt);
+                        await insert.ExecuteNonQueryAsync(ct);
+                    }
 
-            await using (var ev = new NpgsqlCommand(
-                """
-                INSERT INTO booking.events (id, booking_id, type, payload, created_at)
-                VALUES (@id, @bookingId, @type, @payload, @createdAt)
-                """,
-                connection,
-                tx))
-            {
-                ev.Parameters.AddWithValue("id", Guid.NewGuid());
-                ev.Parameters.AddWithValue("bookingId", entity.Id);
-                ev.Parameters.AddWithValue("type", "created");
-                ev.Parameters.Add(new NpgsqlParameter("payload", NpgsqlDbType.Jsonb) { Value = """{"status":"awaiting_payment"}""" });
-                ev.Parameters.AddWithValue("createdAt", entity.CreatedAt);
-                await ev.ExecuteNonQueryAsync(cancellationToken);
-            }
+                    await using (var ev = new NpgsqlCommand(
+                        """
+                        INSERT INTO booking.events (id, booking_id, type, payload, created_at)
+                        VALUES (@id, @bookingId, @type, @payload, @createdAt)
+                        """,
+                        connection,
+                        tx))
+                    {
+                        ev.Parameters.AddWithValue("id", Guid.NewGuid());
+                        ev.Parameters.AddWithValue("bookingId", entity.Id);
+                        ev.Parameters.AddWithValue("type", "created");
+                        ev.Parameters.Add(new NpgsqlParameter("payload", NpgsqlDbType.Jsonb) { Value = """{"status":"awaiting_payment"}""" });
+                        ev.Parameters.AddWithValue("createdAt", entity.CreatedAt);
+                        await ev.ExecuteNonQueryAsync(ct);
+                    }
 
-            await tx.CommitAsync(cancellationToken);
-        }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
-        {
-            await tx.RollbackAsync(cancellationToken);
-            throw new DuplicateBookingRequestException();
-        }
-    }
+                    return true;
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    throw new DuplicateBookingRequestException();
+                }
+            },
+            cancellationToken,
+            beginLocalTransaction: true);
 
     public async Task<bool> TryMarkPaidAsync(Guid bookingId, DateTimeOffset paidAt, CancellationToken cancellationToken)
     {

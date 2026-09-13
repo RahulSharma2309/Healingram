@@ -154,6 +154,8 @@ internal static class AvailabilityEndpoints
                 => Results.Json(ToDto(result.Entity, includeNotes), Json),
             AvailabilityOutcomeKind.Conflict when result.Entity is not null
                 => Results.Json(ToDto(result.Entity, includeNotes), Json, statusCode: StatusCodes.Status409Conflict),
+            AvailabilityOutcomeKind.Conflict
+                => Results.Json(new { error = result.Error ?? "Conflict", details = result.Details ?? [] }, Json, statusCode: StatusCodes.Status409Conflict),
             AvailabilityOutcomeKind.Validation
                 => Results.Json(new { error = result.Error, details = result.Details ?? [] }, Json, statusCode: StatusCodes.Status400BadRequest),
             AvailabilityOutcomeKind.NotFound

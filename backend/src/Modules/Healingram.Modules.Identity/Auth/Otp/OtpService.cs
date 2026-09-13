@@ -30,6 +30,12 @@ internal sealed class OtpService(
             return new OtpStartResult(false, null, "wait before requesting another code");
         }
 
+        var recent = await store.CountCreatedSinceAsync(destination, now.AddHours(-1), cancellationToken);
+        if (recent >= settings.MaxStartsPerHour)
+        {
+            return new OtpStartResult(false, null, "too many codes requested");
+        }
+
         var plain = string.Equals(provider.Name, OtpProviders.Local, StringComparison.OrdinalIgnoreCase)
             ? settings.LocalCode
             : Random.Shared.Next(100000, 999999).ToString();

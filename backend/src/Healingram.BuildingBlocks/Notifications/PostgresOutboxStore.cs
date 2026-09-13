@@ -1,3 +1,4 @@
+using Healingram.BuildingBlocks.Persistence;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using NpgsqlTypes;
@@ -6,36 +7,39 @@ namespace Healingram.BuildingBlocks.Notifications;
 
 internal sealed class PostgresOutboxStore(IConfiguration configuration) : IOutboxStore
 {
-    public async Task<bool> TryInsertAsync(OutboxMessage message, CancellationToken cancellationToken)
-    {
-        await using var connection = CreateConnection();
-        await connection.OpenAsync(cancellationToken);
-        try
-        {
-            await using var command = new NpgsqlCommand(
-                """
-                INSERT INTO notifications.outbox (
-                    id, kind, idempotency_key, payload, status, created_at, sent_at)
-                VALUES (
-                    @id, @kind, @idempotencyKey, @payload, @status, @createdAt, @sentAt)
-                ON CONFLICT (idempotency_key) DO NOTHING
-                """,
-                connection);
-            command.Parameters.AddWithValue("id", message.Id);
-            command.Parameters.AddWithValue("kind", message.Kind);
-            command.Parameters.AddWithValue("idempotencyKey", message.IdempotencyKey);
-            command.Parameters.Add(new NpgsqlParameter("payload", NpgsqlDbType.Jsonb) { Value = message.PayloadJson });
-            command.Parameters.AddWithValue("status", message.Status);
-            command.Parameters.AddWithValue("createdAt", message.CreatedAt);
-            command.Parameters.AddWithValue("sentAt", (object?)message.SentAt ?? DBNull.Value);
-            var inserted = await command.ExecuteNonQueryAsync(cancellationToken);
-            return inserted > 0;
-        }
-        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
-        {
-            return false;
-        }
-    }
+    public Task<bool> TryInsertAsync(OutboxMessage message, CancellationToken cancellationToken)
+        => PostgresWork.WriteAsync(
+            PostgresWork.ConnectionString(configuration),
+            async (connection, tx, ct) =>
+            {
+                try
+                {
+                    await using var command = new NpgsqlCommand(
+                        """
+                        INSERT INTO notifications.outbox (
+                            id, kind, idempotency_key, payload, status, created_at, sent_at)
+                        VALUES (
+                            @id, @kind, @idempotencyKey, @payload, @status, @createdAt, @sentAt)
+                        ON CONFLICT (idempotency_key) DO NOTHING
+                        """,
+                        connection,
+                        tx);
+                    command.Parameters.AddWithValue("id", message.Id);
+                    command.Parameters.AddWithValue("kind", message.Kind);
+                    command.Parameters.AddWithValue("idempotencyKey", message.IdempotencyKey);
+                    command.Parameters.Add(new NpgsqlParameter("payload", NpgsqlDbType.Jsonb) { Value = message.PayloadJson });
+                    command.Parameters.AddWithValue("status", message.Status);
+                    command.Parameters.AddWithValue("createdAt", message.CreatedAt);
+                    command.Parameters.AddWithValue("sentAt", (object?)message.SentAt ?? DBNull.Value);
+                    var inserted = await command.ExecuteNonQueryAsync(ct);
+                    return inserted > 0;
+                }
+                catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+                {
+                    return false;
+                }
+            },
+            cancellationToken);
 
     public async Task<IReadOnlyList<OutboxMessage>> ListPendingAsync(int take, CancellationToken cancellationToken)
     {

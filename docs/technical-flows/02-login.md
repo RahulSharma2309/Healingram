@@ -21,8 +21,8 @@ Portals are separate apps/hosts when `VITE_CUSTOMER_APP_URL` / `VITE_VENDOR_APP_
 | Method | Path | Auth | Body / result |
 | --- | --- | --- | --- |
 | POST | `/api/auth/register` | no | `{ firstName, lastName, phone, email, password, confirmPassword, address? }` → tokens + user. Role forced to `customer`. Address optional. |
-| POST | `/api/auth/login` | no | `{ email, password }` → `{ accessToken, refreshToken, user }` |
-| POST | `/api/auth/refresh` | no | `{ refreshToken }` |
+| POST | `/api/auth/login` | no | `{ email, password, portal? }` → `{ accessToken, refreshToken, user }`. `portal` of `vendor` / `admin` is rejected unless the account has that role |
+| POST | `/api/auth/refresh` | no | `{ refreshToken }` — guest-request scope is preserved |
 | POST | `/api/auth/logout` | no | revokes refresh |
 | GET | `/api/users/me` | Bearer | `{ id, email, fullName, role, roles[], partnerMemberships[], firstName, lastName, phone, address }` |
 | PATCH | `/api/users/me` | Bearer | `{ firstName, lastName, phone, email, address? }` → same user shape. No password change. |

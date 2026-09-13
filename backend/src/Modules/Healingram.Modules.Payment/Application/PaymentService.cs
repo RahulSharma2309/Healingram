@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Healingram.BuildingBlocks.Notifications;
+using Healingram.Contracts.Audit;
 using Healingram.Contracts.Booking;
 using Healingram.Contracts.Payment;
 using Healingram.Modules.Payment.Persistence;
@@ -17,7 +18,8 @@ internal sealed class PaymentService(
     PaymentSettings settings,
     TimeProvider clock,
     ILogger<PaymentService> logger,
-    INotificationOutbox? outbox = null)
+    INotificationOutbox? outbox = null,
+    IAuditPort? audit = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -59,9 +61,18 @@ internal sealed class PaymentService(
                 return PaymentOutcome.Forbidden("Not your payment");
             }
 
-            return await SamePayloadAsync(existing, publicId, cancellationToken)
-                ? PaymentOutcome.Replayed(existing)
-                : PaymentOutcome.Conflict(existing);
+            if (!await SamePayloadAsync(existing, publicId, cancellationToken))
+            {
+                return PaymentOutcome.Conflict(existing);
+            }
+
+            if (string.Equals(existing.Status, PaymentStatuses.Ready, StringComparison.Ordinal)
+                || string.Equals(existing.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
+            {
+                return PaymentOutcome.Replayed(existing);
+            }
+
+            return await CompleteProviderCreateAsync(existing, publicId, replay: true, cancellationToken);
         }
 
         var booking = await bookings.FindByPublicIdAsync(publicId, cancellationToken);
@@ -85,6 +96,12 @@ internal sealed class PaymentService(
             return PaymentOutcome.Invalid("final amount is missing");
         }
 
+        var open = await store.FindOpenByBookingIdAsync(booking.BookingId, cancellationToken);
+        if (open is not null)
+        {
+            return PaymentOutcome.Conflict(open);
+        }
+
         var now = clock.GetUtcNow();
         var entity = new PaymentIntentEntity
         {
@@ -94,26 +111,9 @@ internal sealed class PaymentService(
             Provider = provider.Name,
             AmountInr = booking.AmountInr.Value,
             Currency = string.IsNullOrWhiteSpace(booking.Currency) ? "INR" : booking.Currency,
-            Status = PaymentStatuses.Ready,
+            Status = PaymentStatuses.Creating,
             IdempotencyKey = key,
             CreatedAt = now
-        };
-
-        var created = await provider.CreatePaymentAsync(
-            new CreateProviderPayment(entity.Id, entity.BookingId, entity.AmountInr, entity.Currency, publicId),
-            cancellationToken);
-        entity = new PaymentIntentEntity
-        {
-            Id = entity.Id,
-            BookingId = entity.BookingId,
-            CustomerUserId = entity.CustomerUserId,
-            Provider = created.Provider,
-            ProviderRef = created.ProviderRef,
-            AmountInr = entity.AmountInr,
-            Currency = entity.Currency,
-            Status = entity.Status,
-            IdempotencyKey = entity.IdempotencyKey,
-            CreatedAt = entity.CreatedAt
         };
 
         try
@@ -132,10 +132,23 @@ internal sealed class PaymentService(
                 ? PaymentOutcome.Replayed(raced)
                 : PaymentOutcome.Conflict(raced);
         }
+        catch (DuplicateOpenPaymentException)
+        {
+            var racedOpen = await store.FindOpenByBookingIdAsync(booking.BookingId, cancellationToken);
+            return racedOpen is null
+                ? PaymentOutcome.Invalid("Could not create payment intent")
+                : PaymentOutcome.Conflict(racedOpen);
+        }
 
-        activity?.SetTag("payment.intent_id", entity.Id.ToString());
-        logger.LogInformation("Payment intent {IntentId} created for booking {BookingNumber}", entity.Id, booking.BookingNumber);
-        return PaymentOutcome.Created(entity);
+        var completed = await CompleteProviderCreateAsync(entity, publicId, replay: false, cancellationToken);
+        if (completed.Kind == PaymentOutcomeKind.Created)
+        {
+            activity?.SetTag("payment.intent_id", entity.Id.ToString());
+            logger.LogInformation("Payment intent {IntentId} created for booking {BookingNumber}", entity.Id, booking.BookingNumber);
+            await WriteAuditAsync("payment.intent_created", "payment_intent", entity.Id.ToString(), actor.UserId, cancellationToken);
+        }
+
+        return completed;
     }
 
     public async Task<PaymentOutcome> GetIntentAsync(
@@ -220,6 +233,11 @@ internal sealed class PaymentService(
             return PaymentOutcome.Invalid("booking does not match the payment intent");
         }
 
+        if (!NormalizedPaymentStatuses.IsPaid(ev.NormalizedStatus))
+        {
+            return PaymentOutcome.Invalid("provider event is not a successful payment");
+        }
+
         var inserted = await store.TryInsertWebhookEventAsync(
             Guid.NewGuid(),
             ev.Provider,
@@ -227,11 +245,6 @@ internal sealed class PaymentService(
             ev.RawPayload,
             clock.GetUtcNow(),
             cancellationToken);
-
-        if (!NormalizedPaymentStatuses.IsPaid(ev.NormalizedStatus))
-        {
-            return PaymentOutcome.Invalid("provider event is not a successful payment");
-        }
 
         var current = inserted
             ? intent
@@ -241,13 +254,54 @@ internal sealed class PaymentService(
             logger.LogInformation("Payment webhook replayed for intent {IntentId}", current.Id);
         }
 
-        if (!string.Equals(current.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
-        {
-            await store.MarkIntentPaidAsync(current.Id, cancellationToken);
-            current.Status = PaymentStatuses.Paid;
-        }
+        await store.SetWebhookProcessingAsync(
+            ev.ProviderEventId,
+            PaymentWebhookStatuses.Processing,
+            null,
+            null,
+            cancellationToken);
 
-        return await ReconcileBookingPaidAsync(current, cancellationToken);
+        try
+        {
+            if (!string.Equals(current.Status, PaymentStatuses.Paid, StringComparison.Ordinal))
+            {
+                await store.MarkIntentPaidAsync(current.Id, cancellationToken);
+                current.Status = PaymentStatuses.Paid;
+            }
+
+            var reconciled = await ReconcileBookingPaidAsync(current, cancellationToken);
+            if (reconciled.Kind is PaymentOutcomeKind.Ok or PaymentOutcomeKind.Replayed)
+            {
+                await store.SetWebhookProcessingAsync(
+                    ev.ProviderEventId,
+                    PaymentWebhookStatuses.Processed,
+                    null,
+                    clock.GetUtcNow(),
+                    cancellationToken);
+                await WriteAuditAsync("payment.webhook_processed", "payment_intent", current.Id.ToString(), null, cancellationToken);
+            }
+            else
+            {
+                await store.SetWebhookProcessingAsync(
+                    ev.ProviderEventId,
+                    PaymentWebhookStatuses.Failed,
+                    reconciled.Error,
+                    null,
+                    cancellationToken);
+            }
+
+            return reconciled;
+        }
+        catch
+        {
+            await store.SetWebhookProcessingAsync(
+                ev.ProviderEventId,
+                PaymentWebhookStatuses.Failed,
+                "processing failed",
+                null,
+                cancellationToken);
+            throw;
+        }
     }
 
     internal static bool SecretsEqual(string provided, string expected)
@@ -281,21 +335,87 @@ internal sealed class PaymentService(
         logger.LogInformation("Payment intent {IntentId} marked paid", intent.Id);
         if (outbox is not null)
         {
-            try
-            {
-                await outbox.EnqueueAsync(
-                    NotificationKinds.PaymentPaid,
-                    $"payment-paid:{intent.Id}",
-                    new { intentId = intent.Id },
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Outbox enqueue skipped for payment_paid");
-            }
+            await outbox.EnqueueAsync(
+                NotificationKinds.PaymentPaid,
+                $"payment-paid:{intent.Id}",
+                new { intentId = intent.Id },
+                cancellationToken);
         }
 
+        await WriteAuditAsync("payment.paid", "payment_intent", intent.Id.ToString(), null, cancellationToken);
         return PaymentOutcome.Ok(intent);
+    }
+
+    private async Task<PaymentOutcome> CompleteProviderCreateAsync(
+        PaymentIntentEntity entity,
+        string publicId,
+        bool replay,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var created = await provider.CreatePaymentAsync(
+                new CreateProviderPayment(
+                    entity.Id,
+                    entity.BookingId,
+                    entity.AmountInr,
+                    entity.Currency,
+                    publicId,
+                    entity.IdempotencyKey),
+                cancellationToken);
+            var ready = new PaymentIntentEntity
+            {
+                Id = entity.Id,
+                BookingId = entity.BookingId,
+                CustomerUserId = entity.CustomerUserId,
+                Provider = created.Provider,
+                ProviderRef = created.ProviderRef,
+                AmountInr = entity.AmountInr,
+                Currency = entity.Currency,
+                Status = PaymentStatuses.Ready,
+                IdempotencyKey = entity.IdempotencyKey,
+                CreatedAt = entity.CreatedAt
+            };
+            await store.UpdateIntentAsync(ready, cancellationToken);
+            return replay ? PaymentOutcome.Replayed(ready) : PaymentOutcome.Created(ready);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Provider create failed for payment {IntentId}", entity.Id);
+            entity.Status = PaymentStatuses.Failed;
+            await store.UpdateIntentAsync(entity, cancellationToken);
+            return PaymentOutcome.Invalid("Could not create payment with the provider");
+        }
+    }
+
+    private async Task WriteAuditAsync(
+        string action,
+        string entityType,
+        string? entityId,
+        Guid? actorId,
+        CancellationToken cancellationToken)
+    {
+        if (audit is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await audit.WriteAsync(
+                new AuditEvent(
+                    action,
+                    entityType,
+                    entityId,
+                    actorId,
+                    null,
+                    Activity.Current?.Id),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Audit write skipped for {Action}", action);
+        }
     }
 
     private static bool CanAccess(PaymentActor actor, Guid? ownerId)

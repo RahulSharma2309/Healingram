@@ -57,6 +57,8 @@ export class ApiError extends Error {
   }
 }
 
+let refreshInFlight: Promise<boolean> | null = null;
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
@@ -85,6 +87,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, retry = 
 }
 
 async function refreshAccessToken(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefreshAccessToken().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function doRefreshAccessToken(): Promise<boolean> {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return false;
   try {
@@ -117,6 +127,20 @@ function shouldAttemptRefresh(path: string): boolean {
   return !path.startsWith("/api/auth/login")
     && !path.startsWith("/api/auth/refresh")
     && !path.startsWith("/api/auth/register");
+}
+
+export function apiErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401) return "Your session expired. Please sign in again.";
+    if (error.status === 403) return error.message || "You do not have access to that.";
+    if (error.status === 404) return "We could not find that.";
+    if (error.status === 409) return error.message || "That change conflicted with a newer update. Refresh and try again.";
+    if (error.status === 422) return error.message || "Some of those details are not valid.";
+    if (error.status === 429) return "Too many attempts. Wait a moment and try again.";
+    if (error.status >= 500) return "Something went wrong on the server. Try again shortly.";
+    return error.message;
+  }
+  return "Cannot reach the server. Is the gateway running on port 5000?";
 }
 
 function safeJson(text: string): unknown {

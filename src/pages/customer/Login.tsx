@@ -16,7 +16,7 @@ export function Login() {
     setBusy(true);
     setError(null);
     try {
-      const session = await loginWithPassword(email.trim(), password);
+      const session = await loginWithPassword(email.trim(), password, true, "customer");
       applyAuthUser(session.user);
       if (userHasRole(session.user, "admin")) {
         window.location.assign(adminPortalHref());

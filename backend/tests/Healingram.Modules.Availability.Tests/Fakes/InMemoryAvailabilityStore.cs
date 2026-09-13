@@ -11,10 +11,16 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
     public IReadOnlyList<AvailabilityRequestEntity> Items => _items;
 
     public Task<AvailabilityRequestEntity?> FindByIdempotencyKeyAsync(string key, CancellationToken cancellationToken)
-        => Task.FromResult(_items.FirstOrDefault(i => i.IdempotencyKey == key));
+    {
+        var found = _items.FirstOrDefault(i => i.IdempotencyKey == key);
+        return Task.FromResult(found is null ? null : Clone(found));
+    }
 
     public Task<AvailabilityRequestEntity?> FindByPublicIdAsync(string publicId, CancellationToken cancellationToken)
-        => Task.FromResult(_items.FirstOrDefault(i => i.PublicId == publicId));
+    {
+        var found = _items.FirstOrDefault(i => i.PublicId == publicId);
+        return Task.FromResult(found is null ? null : Clone(found));
+    }
 
     public Task<long> NextPublicSequenceAsync(CancellationToken cancellationToken)
         => Task.FromResult(Interlocked.Increment(ref _sequence));
@@ -30,12 +36,21 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
         return Task.CompletedTask;
     }
 
-    public Task SavePartnerResponseAsync(AvailabilityRequestEntity entity, StatusHistoryEntry history, CancellationToken cancellationToken)
+    public Task<bool> TrySavePartnerResponseAsync(
+        AvailabilityRequestEntity entity,
+        StatusHistoryEntry history,
+        string expectedFromStatus,
+        CancellationToken cancellationToken)
     {
         var stored = _items.First(i => i.Id == entity.Id);
         if (!string.Equals(stored.SnapshotJson, entity.SnapshotJson, StringComparison.Ordinal))
         {
             throw new InvalidOperationException("Price snapshot is immutable");
+        }
+
+        if (!string.Equals(stored.Status, expectedFromStatus, StringComparison.Ordinal))
+        {
+            return Task.FromResult(false);
         }
 
         stored.Status = entity.Status;
@@ -44,7 +59,7 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
         stored.FinalAmountInr = entity.FinalAmountInr;
         stored.AlternativeJson = entity.AlternativeJson;
         stored.History.Add(history);
-        return Task.CompletedTask;
+        return Task.FromResult(true);
     }
 
     public Task AddAdminNoteAsync(Guid requestId, AdminNoteEntry note, CancellationToken cancellationToken)
@@ -55,9 +70,17 @@ internal sealed class InMemoryAvailabilityStore : IAvailabilityStore
 
     public Task<IReadOnlyList<AvailabilityRequestEntity>> ListByStatusesAsync(
         IReadOnlyList<string> statuses,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? retreatSlugs = null)
         => Task.FromResult<IReadOnlyList<AvailabilityRequestEntity>>(
-            _items.Where(i => statuses.Contains(i.Status)).OrderBy(i => i.RequestedAt).Select(Clone).ToArray());
+            _items
+                .Where(i => statuses.Contains(i.Status)
+                            && (retreatSlugs is null
+                                || retreatSlugs.Count == 0
+                                || retreatSlugs.Contains(i.RetreatSlug, StringComparer.OrdinalIgnoreCase)))
+                .OrderBy(i => i.RequestedAt)
+                .Select(Clone)
+                .ToArray());
 
     public Task<IReadOnlyList<AvailabilityRequestEntity>> ListByCustomerUserIdAsync(
         Guid customerUserId,

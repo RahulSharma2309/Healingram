@@ -648,10 +648,7 @@ export function listCustomerRequestsByContact(email: string, phone?: string): Av
   });
 }
 
-export function mapServerAvailabilityStatus(
-  status: string,
-  local?: AvailabilityRequestStatus,
-): AvailabilityRequestStatus {
+export function mapServerAvailabilityStatus(status: string): AvailabilityRequestStatus {
   switch (status.toUpperCase()) {
     case "REQUESTED":
       return "REQUESTED";
@@ -660,12 +657,11 @@ export function mapServerAvailabilityStatus(
     case "UNAVAILABLE":
       return "REJECTED";
     case "CONFIRMED":
-      if (local === "PAID" || local === "CONFIRMED" || local === "COMPLETED") return local;
       return "PAYMENT_PENDING";
     case "PAID":
       return "PAID";
     default:
-      return local ?? "REQUESTED";
+      return "REQUESTED";
   }
 }
 
@@ -688,7 +684,7 @@ function placeholderSnapshot(): PriceSnapshot {
 
 export function mergeServerAvailability(item: ServerAvailability): AvailabilityRequest {
   const existing = getAvailabilityRequest(item.publicId);
-  const status = mapServerAvailabilityStatus(item.status, existing?.status);
+  const status = mapServerAvailabilityStatus(item.status);
   if (existing) {
     existing.status = status;
     if (item.finalAmountInr != null) existing.finalPayableAmount = item.finalAmountInr;

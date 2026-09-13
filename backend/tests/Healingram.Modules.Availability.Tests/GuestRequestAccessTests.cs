@@ -125,4 +125,71 @@ public class GuestRequestAccessTests
             result.Details ?? []);
         Assert.Empty(fixture.Store.Items);
     }
+
+    [Fact]
+    public async Task Guest_token_cannot_create_another_request()
+    {
+        var ownerId = Guid.NewGuid();
+        var (service, _, _) = AvailabilityHarness.Create(ownerId);
+        var guest = new Actor(
+            Roles.Customer,
+            ownerId,
+            OtpPurposes.RequestAccess,
+            "HR-2026-10001",
+            [Roles.Customer],
+            AuthKinds.GuestRequest);
+
+        var result = await service.CreateAsync(AvailabilityHarness.Request(), guest, CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Forbidden, result.Kind);
+    }
+
+    [Fact]
+    public async Task Guest_token_cannot_read_another_request()
+    {
+        var ownerId = Guid.NewGuid();
+        var owner = new Actor(Roles.Customer, ownerId);
+        var (service, _, _) = AvailabilityHarness.Create(ownerId);
+        var first = await service.CreateAsync(AvailabilityHarness.Request("own-stay"), owner, CancellationToken.None);
+        var second = await service.CreateAsync(AvailabilityHarness.Request("other-stay"), owner, CancellationToken.None);
+        var guest = new Actor(
+            Roles.Customer,
+            ownerId,
+            OtpPurposes.RequestAccess,
+            first.Entity!.PublicId,
+            [Roles.Customer],
+            AuthKinds.GuestRequest);
+
+        var loaded = await service.GetAsync(
+            second.Entity!.PublicId,
+            guest,
+            includeInternalNotes: false,
+            CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Forbidden, loaded.Kind);
+    }
+
+    [Fact]
+    public async Task Unscoped_guest_token_cannot_read_owned_requests()
+    {
+        var ownerId = Guid.NewGuid();
+        var owner = new Actor(Roles.Customer, ownerId);
+        var (service, _, _) = AvailabilityHarness.Create(ownerId);
+        var created = await service.CreateAsync(AvailabilityHarness.Request(), owner, CancellationToken.None);
+        var guest = new Actor(
+            Roles.Customer,
+            ownerId,
+            OtpPurposes.RequestAccess,
+            null,
+            [Roles.Customer],
+            AuthKinds.GuestRequest);
+
+        var loaded = await service.GetAsync(
+            created.Entity!.PublicId,
+            guest,
+            includeInternalNotes: false,
+            CancellationToken.None);
+
+        Assert.Equal(AvailabilityOutcomeKind.Forbidden, loaded.Kind);
+    }
 }

@@ -13,4 +13,5 @@ public static class IdentityPolicies
     public const string AdminWrite = "AdminWrite";
     public const string AdminRequestsRead = "admin.requests.read";
     public const string AdminRequestsManage = "admin.requests.manage";
+    public const string AdminPaymentsSimulate = "admin.payments.simulate";
 }

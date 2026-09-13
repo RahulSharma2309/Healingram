@@ -103,6 +103,11 @@ public sealed class HealingramRuntime
             {
                 failures.Add($"Payment:Provider '{payment}' is not implemented in this build");
             }
+
+            if (configuration.GetValue("Payment:AllowLocalSimulate", false))
+            {
+                failures.Add("Payment:AllowLocalSimulate cannot be true in Production");
+            }
         }
 
         if (failures.Count > 0)

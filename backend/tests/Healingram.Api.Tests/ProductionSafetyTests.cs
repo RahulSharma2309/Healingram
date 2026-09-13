@@ -26,6 +26,26 @@ public class ProductionSafetyTests
     }
 
     [Fact]
+    public void Production_refuses_local_payment_simulation()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Jwt:Key"] = "production-jwt-key-must-be-long-enough-32",
+            ["Payment:WebhookSecret"] = "production-webhook-secret",
+            ["Otp:Provider"] = "local",
+            ["Payment:Provider"] = "local",
+            ["Otp:AllowLocalInProduction"] = "true",
+            ["Payment:AllowLocalInProduction"] = "true",
+            ["Payment:AllowLocalSimulate"] = "true",
+            ["DemoMode"] = "false"
+        }).Build();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => HealingramRuntime.EnsureSafeToStart(new StubHost("Production"), config));
+        Assert.Contains("AllowLocalSimulate", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Development_allows_local_defaults()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

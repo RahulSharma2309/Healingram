@@ -13,13 +13,18 @@ internal sealed class AdminAuthorization(IIdentityStore store) : IAdminAuthoriza
             return false;
         }
 
+        var roles = await store.ListRolesAsync(userId, cancellationToken);
+        if (!RoleAuthorization.SatisfiesAdminWrite(RoleAuthorization.NormalizeRoles(roles, user.Role)))
+        {
+            return false;
+        }
+
         var granted = await store.ListAdminPermissionsAsync(userId, cancellationToken);
         if (granted.Count > 0)
         {
             return granted.Any(item => item.Equals(permission, StringComparison.OrdinalIgnoreCase));
         }
 
-        var roles = await store.ListRolesAsync(userId, cancellationToken);
-        return RoleAuthorization.SatisfiesAdminWrite(RoleAuthorization.NormalizeRoles(roles, user.Role));
+        return true;
     }
 }

@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { Shield } from "lucide-react";
 import { ApiError } from "../../lib/api/client";
 import { getAvailabilityByPublicId } from "../../lib/api/availability";
+import { fetchTrips } from "../../lib/api/account";
 import { isRegisteredAccount } from "../../lib/auth";
 import {
-  getAvailabilityRequest,
   mergeServerAvailability,
   type AvailabilityRequest,
 } from "../../lib/availabilityRequests";
@@ -21,6 +21,7 @@ export function PaymentReady() {
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [intentId, setIntentId] = useState<string | null>(null);
+  const [bookingPaid, setBookingPaid] = useState(false);
 
   useEffect(() => {
     if (!requestId) {
@@ -28,14 +29,7 @@ export function PaymentReady() {
       return;
     }
 
-    const local = getAvailabilityRequest(requestId);
-    if (local) {
-      setRequest(local);
-      setLookup("ready");
-    } else {
-      setLookup("loading");
-    }
-
+    setLookup("loading");
     getAvailabilityByPublicId(requestId)
       .then((dto) => {
         setRequest(mergeServerAvailability(dto));
@@ -46,7 +40,18 @@ export function PaymentReady() {
           navigate(`/requests/${requestId}/verify`, { replace: true });
           return;
         }
-        setLookup(getAvailabilityRequest(requestId) ? "ready" : "missing");
+        setLookup("missing");
+      });
+
+    fetchTrips()
+      .then((trips) => {
+        const paid = [...trips.upcoming, ...trips.completed].some(
+          (trip) => trip.publicId === requestId && trip.status.toLowerCase() === "paid",
+        );
+        if (paid) setBookingPaid(true);
+      })
+      .catch(() => {
+        /* trips are a secondary paid signal */
       });
 
     const remembered = rememberedIntentId(requestId);
@@ -61,8 +66,7 @@ export function PaymentReady() {
         const intent = await refreshIntentStatus(intentId);
         if (cancelled || !requestId) return;
         if (intent.status === "paid") {
-          const dto = await getAvailabilityByPublicId(requestId);
-          setRequest(mergeServerAvailability(dto));
+          setBookingPaid(true);
         }
       } catch {
         /* GET is read-only; ignore if API is down */
@@ -95,7 +99,7 @@ export function PaymentReady() {
     );
   }
 
-  if (request.status === "PAID" || request.status === "CONFIRMED") {
+  if (bookingPaid || request.status === "PAID") {
     return (
       <div className="max-w-lg mx-auto px-4 py-16">
         <h1 className="font-display text-2xl font-bold text-sage-800">Payment confirmed</h1>

@@ -42,8 +42,9 @@ public class StatusMachineTests
             AvailabilityHarness.Partner,
             CancellationToken.None);
 
-        Assert.Equal(AvailabilityOutcomeKind.IllegalTransition, again.Kind);
-        Assert.Single(bookings.Calls);
+        Assert.Equal(AvailabilityOutcomeKind.Replayed, again.Kind);
+        Assert.Equal(AvailabilityStatuses.Confirmed, again.Entity!.Status);
+        Assert.Equal(1000, again.Entity.FinalAmountInr);
     }
 
     [Fact]

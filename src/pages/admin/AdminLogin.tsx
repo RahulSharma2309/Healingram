@@ -18,7 +18,7 @@ export function AdminLogin() {
     setBusy(true);
     setError(null);
     try {
-      const session = await loginWithPassword(email.trim(), password, false);
+      const session = await loginWithPassword(email.trim(), password, false, "admin");
       if (!userHasRole(session.user, "admin")) {
         setError("This account is not an admin.");
         return;

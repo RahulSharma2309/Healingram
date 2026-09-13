@@ -212,20 +212,26 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
         Guid userId,
         string tokenHash,
         DateTimeOffset expiresAt,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? authKind = null,
+        string? purpose = null,
+        string? requestId = null)
     {
         await using var connection = CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            INSERT INTO identity.refresh_tokens (id, user_id, token_hash, expires_at)
-            VALUES (@id, @userId, @hash, @expiresAt)
+            INSERT INTO identity.refresh_tokens (id, user_id, token_hash, expires_at, auth_kind, purpose, request_id)
+            VALUES (@id, @userId, @hash, @expiresAt, @authKind, @purpose, @requestId)
             """,
             connection);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("userId", userId);
         command.Parameters.AddWithValue("hash", tokenHash);
         command.Parameters.AddWithValue("expiresAt", expiresAt);
+        command.Parameters.AddWithValue("authKind", (object?)authKind ?? DBNull.Value);
+        command.Parameters.AddWithValue("purpose", (object?)purpose ?? DBNull.Value);
+        command.Parameters.AddWithValue("requestId", (object?)requestId ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -235,7 +241,7 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand(
             """
-            SELECT id, user_id, expires_at, revoked_at
+            SELECT id, user_id, expires_at, revoked_at, auth_kind, purpose, request_id
             FROM identity.refresh_tokens
             WHERE token_hash = @hash
               AND revoked_at IS NULL
@@ -254,7 +260,10 @@ internal sealed class PostgresIdentityStore(IConfiguration configuration) : IIde
             reader.GetGuid(0),
             reader.GetGuid(1),
             reader.GetFieldValue<DateTimeOffset>(2),
-            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3));
+            reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6));
     }
 
     public async Task RevokeRefreshTokenAsync(Guid tokenId, CancellationToken cancellationToken)

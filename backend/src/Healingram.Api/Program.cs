@@ -1,5 +1,4 @@
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.RateLimiting;
+using Healingram.Api.RateLimiting;
 using Healingram.BuildingBlocks.Health;
 using Healingram.BuildingBlocks.Modules;
 using Healingram.BuildingBlocks.Notifications;
@@ -22,16 +21,8 @@ var builder = WebApplication.CreateBuilder(args);
 HealingramRuntime.EnsureSafeToStart(builder.Environment, builder.Configuration);
 builder.Services.AddSingleton(HealingramRuntime.From(builder.Environment, builder.Configuration));
 
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("sensitive", limiter =>
-    {
-        limiter.PermitLimit = 20;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
-    });
-});
+builder.Services.AddHealingramRateLimiting(builder.Configuration);
+builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 
 builder.Host.UseSerilog((ctx, _, config) =>
 {

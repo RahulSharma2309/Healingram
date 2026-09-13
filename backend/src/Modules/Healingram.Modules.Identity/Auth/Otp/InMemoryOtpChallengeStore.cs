@@ -89,4 +89,14 @@ internal sealed class InMemoryOtpChallengeStore : IOtpChallengeStore
             return Task.FromResult(true);
         }
     }
+
+    public Task<int> CountCreatedSinceAsync(string destination, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult(_items.Count(i =>
+                i.Destination.Equals(destination, StringComparison.OrdinalIgnoreCase)
+                && i.CreatedAt > since));
+        }
+    }
 }

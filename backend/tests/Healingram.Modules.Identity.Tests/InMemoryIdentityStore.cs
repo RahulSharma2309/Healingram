@@ -91,9 +91,17 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
     public Task<string?> GetPasswordHashAsync(Guid userId, CancellationToken cancellationToken)
         => Task.FromResult(_passwordHashes.TryGetValue(userId, out var hash) ? hash : null);
 
-    public Task StoreRefreshTokenAsync(Guid id, Guid userId, string tokenHash, DateTimeOffset expiresAt, CancellationToken cancellationToken)
+    public Task StoreRefreshTokenAsync(
+        Guid id,
+        Guid userId,
+        string tokenHash,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken,
+        string? authKind = null,
+        string? purpose = null,
+        string? requestId = null)
     {
-        _refreshTokens.Add(new StoredRefresh(id, userId, tokenHash, expiresAt, null));
+        _refreshTokens.Add(new StoredRefresh(id, userId, tokenHash, expiresAt, null, authKind, purpose, requestId));
         return Task.CompletedTask;
     }
 
@@ -104,7 +112,14 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
             t.Hash == tokenHash && t.RevokedAt is null && t.ExpiresAt > now);
         return Task.FromResult(match is null
             ? null
-            : new RefreshTokenRecord(match.Id, match.UserId, match.ExpiresAt, match.RevokedAt));
+            : new RefreshTokenRecord(
+                match.Id,
+                match.UserId,
+                match.ExpiresAt,
+                match.RevokedAt,
+                match.AuthKind,
+                match.Purpose,
+                match.RequestId));
     }
 
     public Task RevokeRefreshTokenAsync(Guid tokenId, CancellationToken cancellationToken)
@@ -194,7 +209,15 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
         permissions.Add(permission);
     }
 
-    private sealed record StoredRefresh(Guid Id, Guid UserId, string Hash, DateTimeOffset ExpiresAt, DateTimeOffset? RevokedAt);
+    private sealed record StoredRefresh(
+        Guid Id,
+        Guid UserId,
+        string Hash,
+        DateTimeOffset ExpiresAt,
+        DateTimeOffset? RevokedAt,
+        string? AuthKind = null,
+        string? Purpose = null,
+        string? RequestId = null);
 
     private sealed record StoredWishlist(Guid UserId, string Slug, DateTimeOffset CreatedAt);
 }

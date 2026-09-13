@@ -37,7 +37,8 @@ public sealed record CreateProviderPayment(
     Guid BookingId,
     decimal Amount,
     string Currency,
-    string PublicId);
+    string PublicId,
+    string IdempotencyKey);
 
 public sealed record ProviderPaymentRef(string Provider, string ProviderRef, string CheckoutPath);
 
