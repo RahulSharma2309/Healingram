@@ -23,10 +23,18 @@ internal sealed record UnavailableAvailabilityRequest(string? Reason);
 
 internal sealed record AdminNoteRequest(string? Note);
 
-internal sealed record Actor(string Role, Guid? UserId)
+internal sealed record Actor(
+    string Role,
+    Guid? UserId,
+    string? Purpose = null,
+    string? ScopedRequestId = null,
+    IReadOnlyList<string>? Roles = null)
 {
-    public bool IsPartnerWrite => RoleAuthorization.SatisfiesPartnerWrite(Role);
-    public bool IsAdminWrite => RoleAuthorization.SatisfiesAdminWrite(Role);
+    public IReadOnlyList<string> EffectiveRoles
+        => Roles is { Count: > 0 } listed ? listed : [Role];
+
+    public bool IsPartnerWrite => RoleAuthorization.SatisfiesPartnerWrite(EffectiveRoles);
+    public bool IsAdminWrite => RoleAuthorization.SatisfiesAdminWrite(EffectiveRoles);
 }
 
 internal sealed class AvailabilityRequestEntity

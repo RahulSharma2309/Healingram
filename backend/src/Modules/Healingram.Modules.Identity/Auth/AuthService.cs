@@ -1,4 +1,8 @@
+using Healingram.Contracts.Audit;
+using Healingram.Contracts.Availability;
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Otp;
+using Healingram.Modules.Identity.Auth.Otp;
 using Healingram.Modules.Identity.Data;
 using Microsoft.Extensions.Logging;
 
@@ -23,8 +27,18 @@ internal sealed record UpdateProfileRequest(
 internal sealed record LoginRequest(string? Email, string? Password);
 internal sealed record RefreshRequest(string? RefreshToken);
 internal sealed record LogoutRequest(string? RefreshToken);
-internal sealed record GuestVerifyStartRequest(string? Email, string? Phone, string? Channel);
-internal sealed record GuestVerifyRequest(string? Email, string? Phone, string? Code);
+internal sealed record GuestVerifyStartRequest(
+    string? Email,
+    string? Phone,
+    string? Channel,
+    string? PublicId = null,
+    string? Purpose = null);
+internal sealed record GuestVerifyRequest(
+    string? Email,
+    string? Phone,
+    string? Code,
+    string? PublicId = null,
+    string? Purpose = null);
 internal sealed record AuthUserResponse(
     Guid Id,
     string Email,
@@ -35,7 +49,8 @@ internal sealed record AuthUserResponse(
     string? Phone = null,
     string? Address = null,
     string? PhoneCountryCode = null,
-    string? AccountStatus = null);
+    string? AccountStatus = null,
+    IReadOnlyList<string>? Roles = null);
 internal sealed record TokenResponse(string AccessToken, string RefreshToken, AuthUserResponse User);
 
 internal enum AuthStatus
@@ -54,12 +69,14 @@ internal sealed record AuthResult(
     TokenResponse? Tokens = null,
     AuthUserResponse? User = null,
     string? Error = null,
-    IReadOnlyList<string>? Details = null)
+    IReadOnlyList<string>? Details = null,
+    string? DemoCode = null)
 {
     public static AuthResult Ok(TokenResponse tokens) => new(AuthStatus.Ok, Tokens: tokens);
     public static AuthResult Created(TokenResponse tokens) => new(AuthStatus.Created, Tokens: tokens);
     public static AuthResult CurrentUser(AuthUserResponse user) => new(AuthStatus.Ok, User: user);
-    public static AuthResult ChallengeSent() => new(AuthStatus.Ok);
+    public static AuthResult ChallengeSent(string? demoCode = null)
+        => new(AuthStatus.Ok, DemoCode: demoCode);
     public static AuthResult LoggedOut() => new(AuthStatus.NoContent);
     public static AuthResult Invalid(params string[] details)
         => new(AuthStatus.Validation, Error: "Validation failed", Details: details);
@@ -75,7 +92,11 @@ internal sealed class AuthService(
     IIdentityStore store,
     IUserPasswordHasher passwords,
     ITokenService tokens,
-    ILogger<AuthService> logger)
+    IOtpService otp,
+    OtpSettings otpSettings,
+    ILogger<AuthService> logger,
+    IRequestAccessLookup? requestAccess = null,
+    IAuditPort? audit = null)
 {
     public async Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -165,32 +186,59 @@ internal sealed class AuthService(
             return AuthResult.Invalid([.. details]);
         }
 
-        var user = await FindGuestContactAsync(request.Email, request.Phone, cancellationToken);
-        if (user is not null)
+        var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? OtpPurposes.RequestAccess : request.Purpose.Trim();
+        if (!OtpPurposes.IsKnown(purpose))
         {
-            logger.LogInformation("Guest verification started for user {UserId}", user.Id);
-        }
-        else
-        {
-            logger.LogInformation("Guest verification started with no matching customer");
+            return AuthResult.Invalid("purpose is not valid");
         }
 
-        return AuthResult.ChallengeSent();
+        if (OtpPurposes.IsPrivileged(purpose))
+        {
+            return AuthResult.Invalid("this verification path cannot grant staff access");
+        }
+
+        var destination = DestinationOf(request.Email, request.Phone);
+        var user = await FindGuestContactAsync(request.Email, request.Phone, cancellationToken);
+        var started = await otp.StartAsync(
+            new OtpStartCommand(
+                destination,
+                request.Channel ?? "email",
+                purpose,
+                user?.Id,
+                request.PublicId?.Trim()),
+            cancellationToken);
+        if (!started.Sent && started.Error is not null)
+        {
+            return AuthResult.Invalid(started.Error);
+        }
+
+        logger.LogInformation("Guest verification started for purpose {Purpose}", purpose);
+        return AuthResult.ChallengeSent(otpSettings.DemoMode ? started.DevelopmentCode : null);
     }
 
     public async Task<AuthResult> VerifyGuestAsync(
         GuestVerifyRequest request,
         CancellationToken cancellationToken)
     {
-        if (!string.Equals(request.Code?.Trim(), GuestVerification.DevCode, StringComparison.Ordinal))
-        {
-            return AuthResult.Invalid("verification code is not right");
-        }
-
         var details = ValidateGuestContact(request.Email, request.Phone);
         if (details.Count > 0)
         {
             return AuthResult.Invalid([.. details]);
+        }
+
+        var purpose = string.IsNullOrWhiteSpace(request.Purpose) ? OtpPurposes.RequestAccess : request.Purpose.Trim();
+        if (OtpPurposes.IsPrivileged(purpose) || purpose != OtpPurposes.RequestAccess)
+        {
+            return AuthResult.Invalid("this verification path is only for request access");
+        }
+
+        var destination = DestinationOf(request.Email, request.Phone);
+        var verified = await otp.VerifyAsync(
+            new OtpVerifyCommand(destination, purpose, request.Code ?? "", request.PublicId?.Trim()),
+            cancellationToken);
+        if (!verified.Ok)
+        {
+            return AuthResult.Invalid(verified.Error ?? "verification code is not right");
         }
 
         var user = await FindGuestContactAsync(request.Email, request.Phone, cancellationToken);
@@ -199,8 +247,28 @@ internal sealed class AuthService(
             return AuthResult.NoMatch();
         }
 
-        logger.LogInformation("Guest verification succeeded for user {UserId}", user.Id);
-        return AuthResult.Ok(await IssueTokensAsync(user, cancellationToken));
+        string? scopedRequest = request.PublicId?.Trim();
+        if (!string.IsNullOrWhiteSpace(scopedRequest) && requestAccess is not null)
+        {
+            var match = await requestAccess.FindGuestMatchAsync(
+                scopedRequest,
+                request.Email,
+                request.Phone,
+                cancellationToken);
+            if (match is null || match.CustomerUserId != user.Id)
+            {
+                return AuthResult.NoMatch();
+            }
+
+            scopedRequest = match.PublicId;
+        }
+
+        var guestView = user with { Role = Roles.Customer };
+        logger.LogInformation("Guest request-access verification succeeded for user {UserId}", user.Id);
+        return AuthResult.Ok(await IssueTokensAsync(
+            guestView,
+            cancellationToken,
+            new AccessTokenIssue(OtpPurposes.RequestAccess, scopedRequest, [Roles.Customer])));
     }
 
     public async Task<AuthResult> UpdateProfileAsync(
@@ -254,7 +322,7 @@ internal sealed class AuthService(
         }
 
         logger.LogInformation("Updated profile for user {UserId}", userId);
-        return AuthResult.CurrentUser(ToResponse(updated));
+        return AuthResult.CurrentUser(await ToResponseAsync(updated, cancellationToken));
     }
 
     public async Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
@@ -273,6 +341,19 @@ internal sealed class AuthService(
         }
 
         logger.LogInformation("User {UserId} signed in", user.Id);
+        if (audit is not null)
+        {
+            await audit.WriteAsync(
+                new AuditEvent(
+                    "login",
+                    "user",
+                    user.Id.ToString(),
+                    user.Id,
+                    user.Role,
+                    System.Diagnostics.Activity.Current?.Id),
+                cancellationToken);
+        }
+
         return AuthResult.Ok(await IssueTokensAsync(user, cancellationToken));
     }
 
@@ -311,6 +392,18 @@ internal sealed class AuthService(
         {
             await store.RevokeRefreshTokenAsync(stored.Id, cancellationToken);
             logger.LogInformation("Refresh token revoked for user {UserId}", stored.UserId);
+            if (audit is not null)
+            {
+                await audit.WriteAsync(
+                    new AuditEvent(
+                        "logout",
+                        "user",
+                        stored.UserId.ToString(),
+                        stored.UserId,
+                        null,
+                        System.Diagnostics.Activity.Current?.Id),
+                    cancellationToken);
+            }
         }
 
         return AuthResult.LoggedOut();
@@ -324,14 +417,38 @@ internal sealed class AuthService(
             return AuthResult.Rejected("Unauthorized");
         }
 
-        return AuthResult.CurrentUser(ToResponse(user));
+        return AuthResult.CurrentUser(await ToResponseAsync(user, cancellationToken));
     }
 
-    private async Task<TokenResponse> IssueTokensAsync(IdentityUser user, CancellationToken cancellationToken)
+    private async Task<TokenResponse> IssueTokensAsync(
+        IdentityUser user,
+        CancellationToken cancellationToken,
+        AccessTokenIssue? issue = null)
     {
+        var storedRoles = await store.ListRolesAsync(user.Id, cancellationToken);
+        var roles = issue?.Roles is { Count: > 0 } listed
+            ? RoleAuthorization.NormalizeRoles(listed)
+            : RoleAuthorization.NormalizeRoles(storedRoles, user.Role);
         var refresh = tokens.CreateRefreshToken();
         await store.StoreRefreshTokenAsync(Guid.NewGuid(), user.Id, refresh.Hash, refresh.ExpiresAt, cancellationToken);
-        return new TokenResponse(tokens.CreateAccessToken(user), refresh.Token, ToResponse(user));
+        var issued = issue is null
+            ? new AccessTokenIssue(Roles: roles)
+            : issue with { Roles = roles };
+        return new TokenResponse(
+            tokens.CreateAccessToken(user, issued),
+            refresh.Token,
+            await ToResponseAsync(user, cancellationToken, roles));
+    }
+
+    private static string DestinationOf(string? email, string? phone)
+    {
+        var normalizedEmail = email?.Trim() ?? "";
+        if (normalizedEmail.Length > 0)
+        {
+            return normalizedEmail.ToLowerInvariant();
+        }
+
+        return ProfileRules.NormalizePhone(phone) ?? "";
     }
 
     private static List<string> ValidateGuestContact(string? email, string? phone)
@@ -376,20 +493,27 @@ internal sealed class AuthService(
         return await store.FindByPhoneAsync(normalizedPhone, cancellationToken);
     }
 
-    private static AuthUserResponse ToResponse(IdentityUser user)
+    private async Task<AuthUserResponse> ToResponseAsync(
+        IdentityUser user,
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? roles = null)
     {
         var (firstName, lastName) = ProfileRules.SplitName(user.FirstName, user.LastName, user.FullName);
+        var resolved = roles is { Count: > 0 }
+            ? RoleAuthorization.NormalizeRoles(roles)
+            : RoleAuthorization.NormalizeRoles(await store.ListRolesAsync(user.Id, cancellationToken), user.Role);
         return new(
             user.Id,
             user.Email,
             ProfileRules.DisplayName(firstName, lastName, user.FullName, user.Email),
-            user.Role,
+            RoleAuthorization.PrimaryRole(resolved, user.Role),
             firstName,
             lastName,
             user.PhoneE164,
             user.Address,
             user.PhoneE164 is null ? null : ProfileRules.IndiaCountryCode,
-            user.AccountStatus);
+            user.AccountStatus,
+            resolved);
     }
 
     private static List<string> ValidateCredentials(string? email, string? password, bool requireNewPassword, out string normalizedEmail)

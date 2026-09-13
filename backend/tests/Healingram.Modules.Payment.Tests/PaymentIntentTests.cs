@@ -14,7 +14,7 @@ public class PaymentIntentTests
         var booking = PaymentHarness.Awaiting() with { Status = "requested" };
         var (service, store, _) = PaymentHarness.Create(booking);
 
-        var result = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var result = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Validation, result.Kind);
         Assert.Contains(result.Details!, d => d.Contains("awaiting payment", StringComparison.OrdinalIgnoreCase));
@@ -25,14 +25,14 @@ public class PaymentIntentTests
     public async Task Create_rejects_missing_or_zero_amount()
     {
         var (missingService, missingStore, _) = PaymentHarness.Create(PaymentHarness.Awaiting(amount: null));
-        var missing = await missingService.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var missing = await missingService.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Validation, missing.Kind);
         Assert.Contains(missing.Details!, d => d.Contains("amount", StringComparison.OrdinalIgnoreCase));
         Assert.Empty(missingStore.Intents);
 
         var (zeroService, zeroStore, _) = PaymentHarness.Create(PaymentHarness.Awaiting(amount: 0, publicId: "HR-2026-10002"));
-        var zero = await zeroService.CreateIntentAsync(PaymentHarness.Request("HR-2026-10002", "pay-key-002"), CancellationToken.None);
+        var zero = await zeroService.CreateIntentAsync(PaymentHarness.Request("HR-2026-10002", "pay-key-002"), PaymentHarness.Owner, CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Validation, zero.Kind);
         Assert.Empty(zeroStore.Intents);
@@ -43,17 +43,17 @@ public class PaymentIntentTests
     {
         var (service, store, _) = PaymentHarness.Create(PaymentHarness.Awaiting());
 
-        var first = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
-        var second = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var first = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
+        var second = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Created, first.Kind);
         Assert.Equal(PaymentOutcomeKind.Replayed, second.Kind);
         Assert.Equal(first.Entity!.Id, second.Entity!.Id);
         Assert.Equal(PaymentStatuses.Ready, first.Entity.Status);
-        Assert.Equal(PaymentProviders.Fake, first.Entity.Provider);
+        Assert.Equal(PaymentProviders.Local, first.Entity.Provider);
         var dtoJson = JsonSerializer.Serialize(PaymentEndpoints.ToDto(first.Entity));
         Assert.Contains("\"status\":\"ready\"", dtoJson, StringComparison.Ordinal);
-        Assert.Contains($"/pay/fake/{first.Entity.Id}", dtoJson, StringComparison.Ordinal);
+        Assert.Contains($"/pay/local/{first.Entity.Id}", dtoJson, StringComparison.Ordinal);
         Assert.Single(store.Intents);
     }
 
@@ -64,9 +64,10 @@ public class PaymentIntentTests
         var (service, store, bookings) = PaymentHarness.Create(firstBooking);
         bookings.Bookings.Add(PaymentHarness.Awaiting(publicId: "HR-2026-19999"));
 
-        var first = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var first = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
         var conflict = await service.CreateIntentAsync(
             PaymentHarness.Request("HR-2026-19999", PaymentHarness.IdempotencyKey),
+            PaymentHarness.Owner,
             CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Conflict, conflict.Kind);
@@ -78,10 +79,10 @@ public class PaymentIntentTests
     public async Task Get_does_not_change_status()
     {
         var (service, store, _) = PaymentHarness.Create(PaymentHarness.Awaiting());
-        var created = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var created = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
         var mutations = store.MutationCount;
 
-        var loaded = await service.GetIntentAsync(created.Entity!.Id, CancellationToken.None);
+        var loaded = await service.GetIntentAsync(created.Entity!.Id, PaymentHarness.Owner, CancellationToken.None);
 
         Assert.Equal(PaymentOutcomeKind.Ok, loaded.Kind);
         Assert.Equal(PaymentStatuses.Ready, loaded.Entity!.Status);

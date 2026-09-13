@@ -24,6 +24,7 @@ export type CustomerProfile = {
   accountStatus?: string;
 };
 
+/** Display cache only. Never use this as a security decision — call GET /api/users/me. */
 export function getUserRole(): string {
   try {
     return (localStorage.getItem(ROLE_KEY) || "customer").toLowerCase();
@@ -33,7 +34,7 @@ export function getUserRole(): string {
 }
 
 export function homePathForRole(role?: string | null): string {
-  const normalized = (role ?? getUserRole()).trim().toLowerCase();
+  const normalized = (role ?? "").trim().toLowerCase();
   if (normalized === "partner") return "/vendor";
   if (normalized === "admin") return "/admin";
   return "/dashboard";

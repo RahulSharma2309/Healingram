@@ -1,7 +1,10 @@
 using System.Runtime.CompilerServices;
 using Healingram.BuildingBlocks.Modules;
 using Healingram.Contracts.Identity;
+using Healingram.Contracts.Audit;
+using Healingram.Contracts.Otp;
 using Healingram.Modules.Identity.Auth;
+using Healingram.Modules.Identity.Auth.Otp;
 using Healingram.Modules.Identity.Data;
 using Healingram.Modules.Identity.Wishlist;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -10,6 +13,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 [assembly: InternalsVisibleTo("Healingram.Modules.Identity.Tests")]
 
@@ -25,11 +29,18 @@ public sealed class IdentityModule : IAppModule
         var jwt = JwtSettings.From(configuration);
 
         services.AddSingleton(jwt);
+        services.AddSingleton(sp =>
+            OtpSettings.From(configuration, sp.GetRequiredService<IHostEnvironment>().IsDevelopment()));
+        services.AddSingleton<IOtpProvider, LocalOtpProvider>();
         services.AddSingleton<IUserPasswordHasher, AspNetIdentityPasswordHasher>();
         services.AddSingleton<ITokenService, JwtTokenService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<IIdentityStore, PostgresIdentityStore>();
+        services.AddScoped<IOtpChallengeStore, PostgresOtpChallengeStore>();
+        services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IGuestIdentityPort, GuestIdentityAdapter>();
+        services.AddScoped<IAdminAuthorization, AdminAuthorization>();
+        services.AddScoped<IAuditPort, PostgresAuditPort>();
         services.AddScoped<AuthService>();
         services.AddScoped<WishlistService>();
         services.AddHostedService<IdentitySeedHostedService>();

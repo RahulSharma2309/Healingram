@@ -1,3 +1,4 @@
+using Healingram.Contracts.Identity;
 using Healingram.Modules.Identity.Auth;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -73,6 +74,28 @@ public class RegisterProfileTests
     }
 
     [Fact]
+    public async Task Register_ignores_requested_privileged_role()
+    {
+        var result = await CreateService().RegisterAsync(
+            new RegisterRequest(
+                "staff-wannabe@local.test",
+                "Local123!",
+                null,
+                "admin",
+                "Rahul",
+                "Sharma",
+                "9876543210",
+                "Local123!",
+                null),
+            CancellationToken.None);
+
+        Assert.Equal(AuthStatus.Created, result.Status);
+        Assert.Equal(Roles.Customer, result.Tokens?.User.Role);
+        Assert.DoesNotContain(Roles.Admin, result.Tokens?.User.Roles ?? []);
+        Assert.DoesNotContain(Roles.Partner, result.Tokens?.User.Roles ?? []);
+    }
+
+    [Fact]
     public async Task Update_profile_rejects_another_users_email()
     {
         var service = CreateService();
@@ -92,10 +115,5 @@ public class RegisterProfileTests
     private static RegisterRequest ValidRegister(string email)
         => new(email, "Local123!", null, null, "Rahul", "Sharma", "9876543210", "Local123!", null);
 
-    private static AuthService CreateService()
-        => new(
-            new InMemoryIdentityStore(),
-            new AspNetIdentityPasswordHasher(),
-            new StubTokenService(),
-            NullLogger<AuthService>.Instance);
+    private static AuthService CreateService() => AuthTestKit.Create();
 }

@@ -22,7 +22,8 @@ internal static class AvailabilityEndpoints
             AvailabilityService service,
             ClaimsPrincipal user,
             CancellationToken cancellationToken)
-            => Handle(service.CreateAsync(body, ActorOf(user), cancellationToken), includeNotes: false));
+            => Handle(service.CreateAsync(body, ActorOf(user), cancellationToken), includeNotes: false))
+            .RequireRateLimiting("sensitive");
 
         requests.MapGet("/{publicId}", (
             string publicId,
@@ -67,7 +68,8 @@ internal static class AvailabilityEndpoints
             AvailabilityService service,
             ClaimsPrincipal user,
             CancellationToken cancellationToken)
-            => Handle(service.AcceptAlternativeAsync(publicId, ActorOf(user), cancellationToken), includeNotes: false));
+            => Handle(service.AcceptAlternativeAsync(publicId, ActorOf(user), cancellationToken), includeNotes: false))
+            .RequireAuthorization();
 
         app.MapGet("/api/availability/mine", async (
             AvailabilityService service,
@@ -205,11 +207,17 @@ internal static class AvailabilityEndpoints
     internal static Actor ActorOf(ClaimsPrincipal user)
     {
         var authenticated = user.Identity?.IsAuthenticated == true;
+        var roles = authenticated ? RoleAuthorization.GetRoles(user) : [];
         var role = authenticated
-            ? RoleAuthorization.GetRole(user) ?? Roles.Customer
+            ? RoleAuthorization.PrimaryRole(roles)
             : Roles.Customer;
         var raw = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
         Guid? userId = Guid.TryParse(raw, out var parsed) ? parsed : null;
-        return new Actor(role, userId);
+        return new Actor(
+            role,
+            userId,
+            RoleAuthorization.GetPurpose(user),
+            RoleAuthorization.GetScopedRequestId(user),
+            roles);
     }
 }

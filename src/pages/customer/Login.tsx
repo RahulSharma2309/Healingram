@@ -1,7 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { authErrorMessage, loginWithPassword } from "../../lib/api/auth";
+import { authErrorMessage, loginWithPassword, userHasRole } from "../../lib/api/auth";
 import { applyAuthUser, homePathForRole } from "../../lib/auth";
+import { adminPortalHref, isDemoMode, vendorPortalHref } from "../../lib/runtimeConfig";
 
 export function Login() {
   const navigate = useNavigate();
@@ -17,6 +18,14 @@ export function Login() {
     try {
       const session = await loginWithPassword(email.trim(), password);
       applyAuthUser(session.user);
+      if (userHasRole(session.user, "admin")) {
+        window.location.assign(adminPortalHref());
+        return;
+      }
+      if (userHasRole(session.user, "partner")) {
+        window.location.assign(vendorPortalHref());
+        return;
+      }
       navigate(homePathForRole(session.user.role));
     } catch (err) {
       setError(authErrorMessage(err));
@@ -59,9 +68,11 @@ export function Login() {
         >
           {busy ? "Signing in…" : "Log in"}
         </button>
-        <p className="text-xs text-gray-500">
-          Local demo: guest@local.test / partner@local.test / admin@local.test — password Local123!
-        </p>
+        {isDemoMode() ? (
+          <p className="text-xs text-gray-500">
+            Local demo: guest@local.test / partner@local.test / admin@local.test — password Local123!
+          </p>
+        ) : null}
       </form>
       <p className="text-center text-sm text-gray-500 mt-4">
         New here? <Link to="/signup" className="text-teal-600">Create account</Link>

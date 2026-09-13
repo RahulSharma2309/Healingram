@@ -9,18 +9,24 @@ namespace Healingram.Modules.Identity.Auth;
 
 internal sealed record IssuedRefreshToken(string Token, string Hash, DateTimeOffset ExpiresAt);
 
+internal sealed record AccessTokenIssue(
+    string? Purpose = null,
+    string? RequestId = null,
+    IReadOnlyList<string>? Roles = null);
+
 internal interface ITokenService
 {
-    string CreateAccessToken(IdentityUser user);
+    string CreateAccessToken(IdentityUser user, AccessTokenIssue? issue = null);
     IssuedRefreshToken CreateRefreshToken();
     string HashRefreshToken(string refreshToken);
 }
 
 internal sealed class JwtTokenService(JwtSettings settings, TimeProvider clock) : ITokenService
 {
-    public string CreateAccessToken(IdentityUser user)
+    public string CreateAccessToken(IdentityUser user, AccessTokenIssue? issue = null)
     {
         var now = clock.GetUtcNow();
+        var roles = issue?.Roles is { Count: > 0 } listed ? listed : [user.Role];
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -28,10 +34,23 @@ internal sealed class JwtTokenService(JwtSettings settings, TimeProvider clock) 
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new("email", user.Email),
             new("name", user.FullName ?? user.Email),
-            new("role", user.Role),
-            new(ClaimTypes.Role, user.Role),
             new("account_status", user.AccountStatus)
         };
+        foreach (var role in roles)
+        {
+            claims.Add(new Claim("role", role));
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        if (!string.IsNullOrWhiteSpace(issue?.Purpose))
+        {
+            claims.Add(new Claim("purpose", issue.Purpose));
+        }
+
+        if (!string.IsNullOrWhiteSpace(issue?.RequestId))
+        {
+            claims.Add(new Claim("request_id", issue.RequestId));
+        }
 
         var token = new JwtSecurityToken(
             issuer: settings.Issuer,

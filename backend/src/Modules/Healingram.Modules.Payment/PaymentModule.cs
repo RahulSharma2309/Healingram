@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
 using Healingram.BuildingBlocks.Modules;
+using Healingram.Contracts.Payment;
 using Healingram.Modules.Payment.Application;
+using Healingram.Modules.Payment.Infrastructure;
 using Healingram.Modules.Payment.Persistence;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -21,6 +23,7 @@ public sealed class PaymentModule : IAppModule
     {
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(PaymentSettings.From(configuration));
+        services.AddSingleton<IPaymentProvider, LocalPaymentProvider>();
         services.AddScoped<IPaymentStore, PostgresPaymentStore>();
         services.AddScoped<PaymentService>();
     }

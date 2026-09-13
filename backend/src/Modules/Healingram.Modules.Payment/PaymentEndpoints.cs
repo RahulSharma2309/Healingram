@@ -30,27 +30,62 @@ internal static class PaymentEndpoints
                     statusCode: StatusCodes.Status403Forbidden);
             }
 
-            return await Handle(service.CreateIntentAsync(body, cancellationToken));
-        }).RequireAuthorization();
+            return await Handle(service.CreateIntentAsync(body, ActorOf(user), cancellationToken));
+        }).RequireAuthorization().RequireRateLimiting("sensitive");
 
-        payment.MapGet("/intents/{id:guid}", (
+        payment.MapGet("/intents/{id:guid}", async (
             Guid id,
+            ClaimsPrincipal user,
             PaymentService service,
             CancellationToken cancellationToken)
-            => Handle(service.GetIntentAsync(id, cancellationToken)));
+            => await Handle(service.GetIntentAsync(id, ActorOf(user), cancellationToken)))
+            .RequireAuthorization();
+
+        payment.MapPost("/webhooks/local", (
+            FakeWebhookRequest body,
+            HttpRequest http,
+            PaymentService service,
+            PaymentSettings settings,
+            CancellationToken cancellationToken)
+            => LocalWebhook(body, http, service, settings, cancellationToken));
 
         payment.MapPost("/webhooks/fake", (
             FakeWebhookRequest body,
             HttpRequest http,
             PaymentService service,
-            CancellationToken cancellationToken) =>
+            PaymentSettings settings,
+            CancellationToken cancellationToken)
+            => LocalWebhook(body, http, service, settings, cancellationToken));
+    }
+
+    private static Task<IResult> LocalWebhook(
+        FakeWebhookRequest body,
+        HttpRequest http,
+        PaymentService service,
+        PaymentSettings settings,
+        CancellationToken cancellationToken)
+    {
+        if (!settings.AllowLocalSimulate)
         {
-            var secret = http.Headers[PaymentWebhookHeaders.Secret].ToString();
-            return Handle(service.HandleFakeWebhookAsync(
-                string.IsNullOrEmpty(secret) ? null : secret,
-                body,
-                cancellationToken));
-        });
+            return Task.FromResult(Results.NotFound());
+        }
+
+        var secret = http.Headers[PaymentWebhookHeaders.Secret].ToString();
+        return Handle(service.HandleFakeWebhookAsync(
+            string.IsNullOrEmpty(secret) ? null : secret,
+            body,
+            cancellationToken));
+    }
+
+    private static PaymentActor ActorOf(ClaimsPrincipal user)
+    {
+        var raw = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? user.FindFirstValue("sub");
+        Guid? userId = Guid.TryParse(raw, out var parsed) ? parsed : null;
+        var guest = string.Equals(
+            user.FindFirstValue("account_status"),
+            AccountStatuses.Guest,
+            StringComparison.OrdinalIgnoreCase);
+        return new PaymentActor(userId, guest, RoleAuthorization.CanAuthorizeAdminWrite(user));
     }
 
     private static async Task<IResult> Handle(Task<PaymentOutcome> action)
@@ -88,7 +123,7 @@ internal static class PaymentEndpoints
             id = entity.Id,
             status = entity.Status,
             checkoutUrl = string.Equals(entity.Status, PaymentStatuses.Ready, StringComparison.Ordinal)
-                ? $"/pay/fake/{entity.Id}"
+                ? $"/pay/local/{entity.Id}"
                 : null
         };
 }

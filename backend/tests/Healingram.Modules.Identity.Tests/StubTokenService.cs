@@ -7,7 +7,15 @@ internal sealed class StubTokenService : ITokenService
 {
     private int _issued;
 
-    public string CreateAccessToken(IdentityUser user) => $"access-{user.Id}";
+    public IReadOnlyList<string>? LastRoles { get; private set; }
+
+    public string CreateAccessToken(IdentityUser user, AccessTokenIssue? issue = null)
+    {
+        LastRoles = issue?.Roles;
+        return issue?.RequestId is { Length: > 0 } requestId
+            ? $"access-{user.Id}-{requestId}"
+            : $"access-{user.Id}";
+    }
 
     public IssuedRefreshToken CreateRefreshToken()
     {

@@ -1,5 +1,6 @@
 using Healingram.Contracts.Booking;
 using Healingram.Modules.Payment.Application;
+using Healingram.Modules.Payment.Infrastructure;
 using Healingram.Modules.Payment.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -101,21 +102,34 @@ internal static class PaymentHarness
             bookings.Bookings.Add(booking);
         }
 
+        var paymentSettings = settings ?? new PaymentSettings();
         var service = new PaymentService(
             store,
             bookings,
-            settings ?? new PaymentSettings(),
+            new LocalPaymentProvider(paymentSettings),
+            paymentSettings,
             TimeProvider.System,
             NullLogger<PaymentService>.Instance);
         return (service, store, bookings);
     }
 
+    public static Guid CustomerId { get; } = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+
+    public static PaymentActor Owner { get; } = new(CustomerId, false, false);
+
+    public static PaymentActor OtherCustomer { get; } = new(Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"), false, false);
+
     public static BookingPaymentGate Awaiting(decimal? amount = 12000m, string publicId = PublicId)
-        => new(Guid.NewGuid(), "BK-2026-10001", BookingStatuses.AwaitingPayment, amount, publicId);
+        => new(Guid.NewGuid(), "BK-2026-10001", BookingStatuses.AwaitingPayment, amount, publicId, CustomerId);
 
     public static CreatePaymentIntentRequest Request(string publicId = PublicId, string key = IdempotencyKey)
         => new(publicId, key);
 
-    public static FakeWebhookRequest Webhook(Guid intentId, string eventId = "evt-001")
-        => new(intentId, eventId);
+    public static FakeWebhookRequest Webhook(
+        Guid intentId,
+        string eventId = "evt-001",
+        decimal? amount = 12000m,
+        string currency = "INR",
+        Guid? bookingId = null)
+        => new(intentId, eventId, amount, currency, bookingId);
 }

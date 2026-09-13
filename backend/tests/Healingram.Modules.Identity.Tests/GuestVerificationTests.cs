@@ -116,10 +116,5 @@ public class GuestVerificationTests
         Assert.Equal(AccountStatuses.Registered, registered.Tokens?.User.AccountStatus);
     }
 
-    private static AuthService CreateService(InMemoryIdentityStore store)
-        => new(
-            store,
-            new AspNetIdentityPasswordHasher(),
-            new StubTokenService(),
-            NullLogger<AuthService>.Instance);
+    private static AuthService CreateService(InMemoryIdentityStore store) => AuthTestKit.Create(store);
 }

@@ -1,6 +1,7 @@
 /**
- * Availability request store — local MVP “backend”.
- * Status model is shared across customer, partner, admin, and payment.
+ * Display cache for availability requests.
+ * PostgreSQL via /api/availability is the business source of truth.
+ * localStorage is UX only (list merge, form continuity) and is never authorization.
  */
 
 import type { PriceStatus, SettlementMode } from "../data/programmePricing";

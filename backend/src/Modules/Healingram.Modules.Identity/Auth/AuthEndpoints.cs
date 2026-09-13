@@ -14,17 +14,22 @@ internal static class AuthEndpoints
     {
         var auth = app.MapGroup("/api/auth").WithTags("Auth");
         auth.MapPost("/register", (RegisterRequest body, AuthService service, CancellationToken ct)
-            => Handle(() => service.RegisterAsync(body, ct)));
+            => Handle(() => service.RegisterAsync(body, ct)))
+            .RequireRateLimiting("sensitive");
         auth.MapPost("/login", (LoginRequest body, AuthService service, CancellationToken ct)
-            => Handle(() => service.LoginAsync(body, ct)));
+            => Handle(() => service.LoginAsync(body, ct)))
+            .RequireRateLimiting("sensitive");
         auth.MapPost("/refresh", (RefreshRequest body, AuthService service, CancellationToken ct)
-            => Handle(() => service.RefreshAsync(body, ct)));
+            => Handle(() => service.RefreshAsync(body, ct)))
+            .RequireRateLimiting("sensitive");
         auth.MapPost("/logout", (LogoutRequest? body, AuthService service, CancellationToken ct)
             => Handle(() => service.LogoutAsync(body ?? new LogoutRequest(null), ct)));
         auth.MapPost("/guest/verify-start", (GuestVerifyStartRequest body, AuthService service, CancellationToken ct)
-            => Handle(() => service.StartGuestVerificationAsync(body, ct)));
+            => Handle(() => service.StartGuestVerificationAsync(body, ct)))
+            .RequireRateLimiting("sensitive");
         auth.MapPost("/guest/verify", (GuestVerifyRequest body, AuthService service, CancellationToken ct)
-            => Handle(() => service.VerifyGuestAsync(body, ct)));
+            => Handle(() => service.VerifyGuestAsync(body, ct)))
+            .RequireRateLimiting("sensitive");
 
         app.MapGet("/api/users/me", async (ClaimsPrincipal principal, AuthService service, CancellationToken ct) =>
         {
@@ -67,6 +72,8 @@ internal static class AuthEndpoints
         {
             AuthStatus.Ok when result.Tokens is not null => Results.Ok(result.Tokens),
             AuthStatus.Ok when result.User is not null => Results.Ok(result.User),
+            AuthStatus.Ok when result.DemoCode is not null
+                => Results.Ok(new { sent = true, demoCode = result.DemoCode }),
             AuthStatus.Ok => Results.Ok(new { sent = true }),
             AuthStatus.NoMatch => Results.Ok(new { matched = false }),
             AuthStatus.Created when result.Tokens is not null => Results.Created("/api/users/me", result.Tokens),

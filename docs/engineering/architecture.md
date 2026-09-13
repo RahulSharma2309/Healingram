@@ -32,7 +32,9 @@ One Postgres
 
 You are one founder. The guest journey is one product. Splitting into `infra-auth`, `infra-catalog`, … already bit us locally (old Docker gateway stole port 5000).
 
-A **module** owns its tables and its HTTP routes. It talks to another module through a **C# interface** (a port), never `SELECT` from the other schema. Tomorrow, Payment can become its own service by swapping that port for HTTP. You do not pay Kubernetes until a module actually needs its own scale.
+A **module** owns its tables and its HTTP routes. It talks to another module through a **C# interface** (a port), never `SELECT` from the other schema. Business code depends on `IOtpProvider`, `IPaymentProvider`, `IPartnerAuthorization`, `INotificationOutbox`, and `IAuditPort` — not Twilio, Razorpay, or SMTP. Tomorrow, Payment can become its own service by swapping that port for HTTP. You do not pay Kubernetes until a module actually needs its own scale.
+
+Configurable hosts: `App:CustomerUrl`, `App:VendorUrl`, `App:AdminUrl` (frontend: `VITE_*_APP_URL`). Production CORS is those origins only. Production refuses default JWT/webhook secrets, demo seeds, and `DemoMode`.
 
 ## Demo vs live UI
 

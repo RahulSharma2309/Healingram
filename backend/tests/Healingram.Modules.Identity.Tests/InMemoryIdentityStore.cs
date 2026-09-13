@@ -9,6 +9,8 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
     private readonly Dictionary<Guid, string> _passwordHashes = [];
     private readonly List<StoredRefresh> _refreshTokens = [];
     private readonly List<StoredWishlist> _wishlist = [];
+    private readonly Dictionary<Guid, HashSet<string>> _roles = [];
+    private readonly Dictionary<Guid, HashSet<string>> _permissions = [];
 
     public Task<IdentityUser?> FindByEmailAsync(string email, CancellationToken cancellationToken)
         => Task.FromResult(_users.FirstOrDefault(u => u.Email.Equals(email, StringComparison.OrdinalIgnoreCase)));
@@ -30,6 +32,15 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
         var stored = user with { AccountStatus = AccountStatuses.Registered };
         _users.Add(stored);
         _passwordHashes[stored.Id] = passwordHash;
+        GrantRole(stored.Id, stored.Role);
+        if (string.Equals(stored.Role, Roles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var permission in AdminPermissions.All)
+            {
+                GrantPermission(stored.Id, permission);
+            }
+        }
+
         return Task.FromResult(stored);
     }
 
@@ -42,6 +53,7 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
 
         var stored = user with { AccountStatus = AccountStatuses.Guest };
         _users.Add(stored);
+        GrantRole(stored.Id, stored.Role);
         return Task.FromResult(stored);
     }
 
@@ -130,6 +142,51 @@ internal sealed class InMemoryIdentityStore : IIdentityStore
     {
         _wishlist.RemoveAll(item => item.UserId == userId && item.Slug == slug);
         return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> ListRolesAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var fallback = _users.FirstOrDefault(u => u.Id == userId)?.Role;
+        var stored = _roles.TryGetValue(userId, out var roles) ? roles : [];
+        return Task.FromResult(RoleAuthorization.NormalizeRoles(stored, fallback));
+    }
+
+    public Task GrantRoleAsync(Guid userId, string role, CancellationToken cancellationToken)
+    {
+        GrantRole(userId, role);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> ListAdminPermissionsAsync(Guid userId, CancellationToken cancellationToken)
+        => Task.FromResult<IReadOnlyList<string>>(
+            _permissions.TryGetValue(userId, out var permissions) ? permissions.ToArray() : []);
+
+    public Task GrantAdminPermissionAsync(Guid userId, string permission, CancellationToken cancellationToken)
+    {
+        GrantPermission(userId, permission);
+        return Task.CompletedTask;
+    }
+
+    private void GrantRole(Guid userId, string role)
+    {
+        if (!_roles.TryGetValue(userId, out var roles))
+        {
+            roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _roles[userId] = roles;
+        }
+
+        roles.Add(role);
+    }
+
+    private void GrantPermission(Guid userId, string permission)
+    {
+        if (!_permissions.TryGetValue(userId, out var permissions))
+        {
+            permissions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _permissions[userId] = permissions;
+        }
+
+        permissions.Add(permission);
     }
 
     private sealed record StoredRefresh(Guid Id, Guid UserId, string Hash, DateTimeOffset ExpiresAt, DateTimeOffset? RevokedAt);

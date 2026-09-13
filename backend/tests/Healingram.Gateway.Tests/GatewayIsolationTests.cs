@@ -44,22 +44,31 @@ public class GatewayIsolationTests
 
     private static string FindGatewayFile(string fileName)
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
+        var starts = new[]
         {
-            var candidates = new[]
-            {
-                Path.Combine(dir.FullName, "backend", "src", "Healingram.Gateway", fileName),
-                Path.Combine(dir.FullName, "src", "Healingram.Gateway", fileName)
-            };
+            new DirectoryInfo(AppContext.BaseDirectory),
+            new DirectoryInfo(Directory.GetCurrentDirectory())
+        };
 
-            var match = candidates.FirstOrDefault(File.Exists);
-            if (match is not null)
+        foreach (var start in starts)
+        {
+            var dir = start;
+            while (dir is not null)
             {
-                return match;
+                var candidates = new[]
+                {
+                    Path.Combine(dir.FullName, "backend", "src", "Healingram.Gateway", fileName),
+                    Path.Combine(dir.FullName, "src", "Healingram.Gateway", fileName)
+                };
+
+                var match = candidates.FirstOrDefault(File.Exists);
+                if (match is not null)
+                {
+                    return match;
+                }
+
+                dir = dir.Parent;
             }
-
-            dir = dir.Parent;
         }
 
         throw new FileNotFoundException($"Could not find Healingram.Gateway/{fileName} from {AppContext.BaseDirectory}.");

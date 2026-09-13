@@ -16,4 +16,6 @@ public sealed record BookingPaymentGate(
     string BookingNumber,
     string Status,
     decimal? AmountInr,
-    string PublicId);
+    string PublicId,
+    Guid? CustomerUserId = null,
+    string Currency = "INR");

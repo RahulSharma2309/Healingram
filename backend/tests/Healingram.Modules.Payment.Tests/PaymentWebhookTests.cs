@@ -10,7 +10,7 @@ public class PaymentWebhookTests
     public async Task Webhook_requires_shared_secret()
     {
         var (service, store, bookings) = PaymentHarness.Create(PaymentHarness.Awaiting());
-        var created = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var created = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
 
         var missing = await service.HandleFakeWebhookAsync(
             null,
@@ -32,7 +32,7 @@ public class PaymentWebhookTests
     public async Task Webhook_marks_paid_once()
     {
         var (service, store, bookings) = PaymentHarness.Create(PaymentHarness.Awaiting());
-        var created = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var created = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
 
         var paid = await service.HandleFakeWebhookAsync(
             PaymentHarness.WebhookSecret,
@@ -51,7 +51,7 @@ public class PaymentWebhookTests
     public async Task Replay_of_same_provider_event_is_once()
     {
         var (service, store, bookings) = PaymentHarness.Create(PaymentHarness.Awaiting());
-        var created = await service.CreateIntentAsync(PaymentHarness.Request(), CancellationToken.None);
+        var created = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
         var body = PaymentHarness.Webhook(created.Entity!.Id, "evt-replay");
 
         var first = await service.HandleFakeWebhookAsync(PaymentHarness.WebhookSecret, body, CancellationToken.None);
@@ -63,5 +63,32 @@ public class PaymentWebhookTests
         Assert.Single(store.WebhookEventIds);
         Assert.Single(bookings.MarkPaidCalls);
         Assert.Single(store.Intents);
+    }
+
+    [Fact]
+    public async Task Invalid_payload_and_already_paid_intent_do_not_double_pay()
+    {
+        var (service, store, bookings) = PaymentHarness.Create(PaymentHarness.Awaiting());
+        var created = await service.CreateIntentAsync(PaymentHarness.Request(), PaymentHarness.Owner, CancellationToken.None);
+
+        var invalid = await service.HandleProviderWebhookAsync(
+            PaymentHarness.WebhookSecret,
+            "{not-json",
+            CancellationToken.None);
+        Assert.Equal(PaymentOutcomeKind.Validation, invalid.Kind);
+
+        var first = await service.HandleFakeWebhookAsync(
+            PaymentHarness.WebhookSecret,
+            PaymentHarness.Webhook(created.Entity!.Id, "evt-paid"),
+            CancellationToken.None);
+        var secondEvent = await service.HandleFakeWebhookAsync(
+            PaymentHarness.WebhookSecret,
+            PaymentHarness.Webhook(created.Entity.Id, "evt-paid-again"),
+            CancellationToken.None);
+
+        Assert.Equal(PaymentOutcomeKind.Ok, first.Kind);
+        Assert.Equal(PaymentOutcomeKind.Ok, secondEvent.Kind);
+        Assert.Equal(PaymentStatuses.Paid, store.Intents[0].Status);
+        Assert.Single(bookings.MarkPaidCalls);
     }
 }

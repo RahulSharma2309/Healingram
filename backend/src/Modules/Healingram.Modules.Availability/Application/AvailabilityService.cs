@@ -135,7 +135,7 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Missing();
         }
 
-        if (!CanRead(actor, entity))
+        if (!await CanReadAsync(actor, entity, cancellationToken))
         {
             return actor.UserId is null
                 ? AvailabilityOutcome.Unauth("Verify it's you to view this request")
@@ -146,11 +146,29 @@ internal sealed class AvailabilityService(
         return AvailabilityOutcome.Ok(entity);
     }
 
-    private static bool CanRead(Actor actor, AvailabilityRequestEntity entity)
+    private async Task<bool> CanReadAsync(
+        Actor actor,
+        AvailabilityRequestEntity entity,
+        CancellationToken cancellationToken)
     {
-        if (actor.IsPartnerWrite || actor.IsAdminWrite)
+        if (actor.IsAdminWrite)
         {
             return true;
+        }
+
+        if (actor.IsPartnerWrite)
+        {
+            return actor.UserId is not null
+                   && await partnerAccess.CanAccessRetreatAsync(
+                       actor.UserId.Value,
+                       entity.RetreatSlug,
+                       cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(actor.ScopedRequestId)
+            && !string.Equals(actor.ScopedRequestId, entity.PublicId, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
 
         return actor.UserId is not null
@@ -389,7 +407,16 @@ internal sealed class AvailabilityService(
             return AvailabilityOutcome.Missing();
         }
 
-        if (!requirePartnerWrite && action == AvailabilityActions.AcceptAlternative && !CanRead(actor, entity))
+        if (requirePartnerWrite && !actor.IsAdminWrite)
+        {
+            if (actor.UserId is null
+                || !await partnerAccess.CanAccessRetreatAsync(actor.UserId.Value, entity.RetreatSlug, cancellationToken))
+            {
+                return AvailabilityOutcome.Deny("Not your retreat");
+            }
+        }
+
+        if (!requirePartnerWrite && action == AvailabilityActions.AcceptAlternative && !await CanReadAsync(actor, entity, cancellationToken))
         {
             return actor.UserId is null
                 ? AvailabilityOutcome.Unauth("Verify it's you to continue")
@@ -414,7 +441,12 @@ internal sealed class AvailabilityService(
             using var bookingSpan = AvailabilityTelemetry.Source.StartActivity("availability.create_booking");
             bookingSpan?.SetTag("availability.public_id", entity.PublicId);
             await bookings.CreateAwaitingPaymentAsync(
-                new CreateAwaitingPaymentBooking(entity.Id, entity.PublicId, entity.SnapshotJson, amount),
+                new CreateAwaitingPaymentBooking(
+                    entity.Id,
+                    entity.PublicId,
+                    entity.SnapshotJson,
+                    amount,
+                    entity.CustomerUserId),
                 cancellationToken);
             finalAmountInr = amount;
         }

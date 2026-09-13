@@ -21,7 +21,7 @@ If the API fails, the UI **shows an error**. It must not invent a local-only boo
 | POST | `/api/availability/requests` | optional Bearer | Logged-in user id, or a new/existing **guest** customer from email/phone |
 | GET | `/api/availability/requests/{publicId}` | Bearer (owner, partner, or admin) | 401 if anonymous. Public id alone is not enough. |
 | POST | `/api/auth/guest/verify-start` | no | `{ email or phone, channel }` — always `{ sent: true }` when the contact looks valid |
-| POST | `/api/auth/guest/verify` | no | `{ email or phone, code }` — `560142` issues a guest JWT, or `{ matched: false }` if that contact has no customer |
+| POST | `/api/auth/guest/verify` | no | `{ email or phone, code, publicId?, purpose }` — request-scoped OTP via `IOtpService`. Local demo code is not returned unless `DemoMode=true`. |
 | GET | `/api/availability/mine` | Bearer | That customer’s requests only |
 | POST | `/api/auth/register` | no | Same email/phone as a guest **promotes** that row (`account_status=registered`) |
 | POST | `/api/payment/intents` | Bearer, registered only | Guest JWT is 403 |
@@ -41,3 +41,5 @@ Same key + same fingerprint → replay. Same key + different body → `409`.
 | `catalog.retreats` | Read-only check: published? |
 
 Statuses: `REQUESTED` → `CONFIRMED` | `ALTERNATIVE_OFFERED` | `UNAVAILABLE`.
+
+Partner confirm / alternative / unavailable and GET by public id are not authorized by the partner role alone. Availability calls `IPartnerAuthorization` / `IPartnerAccess.CanAccessRetreatAsync` so Partner A cannot read or change Partner B’s retreat. A public request id is not authentication. Guest OTP is purpose `REQUEST_ACCESS` and may bind `request_id` on the JWT.
